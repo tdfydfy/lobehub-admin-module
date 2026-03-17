@@ -1,0 +1,23 @@
+# 示例：将管理端静态资源托管到 /admin/，后端接口反代到 /admin-api/
+
+location = /admin {
+  return 301 /admin/;
+}
+
+location /admin/ {
+  alias /srv/lobehub-admin/web/;
+  try_files $uri $uri/ /admin/index.html;
+}
+
+location = /admin/database-viewer.html {
+  alias /srv/lobehub-admin/web/database-viewer.html;
+}
+
+location /admin-api/ {
+  proxy_pass http://lobehub-admin-service:3321/;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
