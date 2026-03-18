@@ -7,15 +7,15 @@ Date: 2026-03-18
 - After switching the template admin, the frontend could keep the previously selected template agent.
 - The template agent list is loaded asynchronously, so an earlier response could briefly leave stale state on screen.
 - Saving the template only checked that `templateUserId` and `templateAgentId` were non-empty, not that they still belonged together.
-- The database function `lobehub_admin.set_project_template(...)` would eventually reject the mismatch, but the API error was not friendly enough.
+- The database function `lobehub_admin.set_project_template(...)` correctly rejected the mismatch and raised `Template agent ... does not belong to template user ...`, but the API error was not friendly enough.
 
 ## Fix
 
 - Keep the database ownership validation unchanged.
-- When the template admin changes, clear the current template agent selection and reload the agent list.
-- Do not allow template save while the agent list is still loading.
+- When the template admin changes, clear the current agent selection and reload the agent list for the new admin.
+- Disable or block template save while the agent list is still loading.
 - Before save, verify that the selected agent still exists in the current admin's agent list.
-- Add a backend ownership check so the API returns a clearer business error before the raw SQL message leaks through.
+- Add a backend ownership check so the API returns a clearer business error before the raw SQL error leaks through.
 
 ## Related Runtime Fix
 
