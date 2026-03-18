@@ -61,6 +61,12 @@ function memberMutationError(message: string) {
   return error;
 }
 
+function templateMutationError(message: string) {
+  const error = new Error(message);
+  (error as Error & { statusCode?: number }).statusCode = 409;
+  return error;
+}
+
 function mapProjectRow(row: ProjectSummaryRow) {
   return {
     id: row.id,
@@ -211,6 +217,43 @@ async function assertAdminsRemain(
 
   if (remainingAdminCount < 1) {
     throw memberMutationError('项目至少需要保留一名管理员');
+  }
+}
+
+async function assertTemplateSelectionValid(
+  executeQuery: typeof query,
+  projectId: string,
+  templateUserId: string,
+  templateAgentId: string,
+) {
+  const result = await executeQuery<{ is_admin: boolean; agent_belongs: boolean }>(
+    `
+    select
+      exists (
+        select 1
+        from lobehub_admin.project_members pm
+        where pm.project_id = $1
+          and pm.user_id = $2
+          and pm.role = 'admin'
+      ) as is_admin,
+      exists (
+        select 1
+        from public.agents a
+        where a.id = $3
+          and a.user_id = $2
+      ) as agent_belongs
+    `,
+    [projectId, templateUserId, templateAgentId],
+  );
+
+  const selection = result.rows[0];
+
+  if (!selection?.is_admin) {
+    throw templateMutationError('模板用户必须是项目管理员');
+  }
+
+  if (!selection.agent_belongs) {
+    throw templateMutationError('所选模板助手不属于当前模板管理员，请重新选择后再保存');
   }
 }
 
@@ -754,10 +797,26 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     await ensureProjectAdmin(actor.id, params.projectId);
 
-    await query(
-      'select * from lobehub_admin.set_project_template($1, $2, $3, $4, $5)',
-      [params.projectId, body.templateUserId, body.templateAgentId, body.copySkills, actor.id],
-    );
+    await assertTemplateSelectionValid(query, params.projectId, body.templateUserId, body.templateAgentId);
+
+    try {
+      await query(
+        'select * from lobehub_admin.set_project_template($1, $2, $3, $4, $5)',
+        [params.projectId, body.templateUserId, body.templateAgentId, body.copySkills, actor.id],
+      );
+    } catch (error) {
+      const message = (error as Error).message;
+
+      if (message === 'Template user must be a project admin') {
+        throw templateMutationError('模板用户必须是项目管理员');
+      }
+
+      if (message.includes('does not belong to template user')) {
+        throw templateMutationError('所选模板助手不属于当前模板管理员，请重新选择后再保存');
+      }
+
+      throw error;
+    }
 
     const result = await fetchProjectTemplate(params.projectId);
 

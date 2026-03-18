@@ -91,8 +91,9 @@ type WorkbenchProps = {
   loadingDetail: boolean;
   template: ProjectTemplate | null;
   templateAdminId: string;
-  setTemplateAdminId: (value: string) => void;
+  handleTemplateAdminChange: (value: string) => void;
   agents: AgentOption[];
+  loadingAgentOptions: boolean;
   selectedAgentId: string;
   setSelectedAgentId: (value: string) => void;
   copySkills: boolean;
@@ -127,8 +128,9 @@ function ProjectWorkbench({
   loadingDetail,
   template,
   templateAdminId,
-  setTemplateAdminId,
+  handleTemplateAdminChange,
   agents,
+  loadingAgentOptions,
   selectedAgentId,
   setSelectedAgentId,
   copySkills,
@@ -145,6 +147,7 @@ function ProjectWorkbench({
   handleDeleteProject,
 }: WorkbenchProps) {
   const rows = [...admins, ...members];
+  const hasCurrentAgentSelection = agents.some((agent) => agent.id === selectedAgentId);
 
   return (
     <>
@@ -332,7 +335,7 @@ function ProjectWorkbench({
 
             <label className="field">
               <span>模板管理员</span>
-              <select value={templateAdminId} onChange={(event) => setTemplateAdminId(event.target.value)}>
+              <select value={templateAdminId} onChange={(event) => handleTemplateAdminChange(event.target.value)}>
                 <option value="">请选择管理员</option>
                 {admins.map((admin) => (
                   <option key={admin.userId} value={admin.userId}>
@@ -341,6 +344,10 @@ function ProjectWorkbench({
                 ))}
               </select>
             </label>
+            {loadingAgentOptions ? <p className="muted">Loading template agents...</p> : null}
+            {!loadingAgentOptions && templateAdminId && agents.length === 0 ? (
+              <p className="muted">No template agents available for this admin.</p>
+            ) : null}
 
             <div className="agent-list">
               {agents.map((agent) => (
@@ -361,7 +368,11 @@ function ProjectWorkbench({
               <span>复制模板管理员的全部技能</span>
             </label>
 
-            <button className="primary wide" onClick={() => void handleSaveTemplate()}>
+            <button
+              className="primary wide"
+              disabled={loadingAgentOptions || !templateAdminId || !selectedAgentId || !hasCurrentAgentSelection}
+              onClick={() => void handleSaveTemplate()}
+            >
               保存模板配置
             </button>
           </section>
@@ -686,6 +697,7 @@ export default function App() {
   const [template, setTemplate] = useState<ProjectTemplate | null>(null);
   const [templateAdminId, setTemplateAdminId] = useState('');
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [loadingAgentOptions, setLoadingAgentOptions] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [copySkills, setCopySkills] = useState(true);
   const [setDefaultAgent, setSetDefaultAgent] = useState(false);
@@ -807,6 +819,8 @@ export default function App() {
       setLatestJobId('');
       setJob(null);
       setJobItems([]);
+      setAgents([]);
+      setLoadingAgentOptions(false);
 
       try {
         const [projectResult, membersResult, templateResult] = await Promise.all([
@@ -845,20 +859,37 @@ export default function App() {
   useEffect(() => {
     if (!actorId || !selectedProjectId || !templateAdminId) {
       setAgents([]);
+      setLoadingAgentOptions(false);
       return;
     }
+
+    let cancelled = false;
+    setLoadingAgentOptions(true);
 
     void api
       .getAgents(actorId, selectedProjectId, templateAdminId)
       .then((result) => {
+        if (cancelled) return;
         setAgents(result.agents);
-        const hasSelectedAgent = result.agents.some((agent) => agent.id === selectedAgentId);
-        if (!hasSelectedAgent) {
-          setSelectedAgentId(result.agents[0]?.id ?? '');
-        }
+        setSelectedAgentId((current) =>
+          result.agents.some((agent) => agent.id === current) ? current : (result.agents[0]?.id ?? ''),
+        );
       })
-      .catch((error: Error) => setFeedback(error.message));
-  }, [actorId, selectedProjectId, templateAdminId, selectedAgentId]);
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setAgents([]);
+        setFeedback(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingAgentOptions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [actorId, selectedProjectId, templateAdminId]);
 
   useEffect(() => {
     if (!actorId || !selectedProjectId || !latestJobId) return;
@@ -908,6 +939,7 @@ export default function App() {
     setTemplateAdminId('');
     setSelectedAgentId('');
     setAgents([]);
+    setLoadingAgentOptions(false);
     setLatestJobId('');
     setJob(null);
     setJobItems([]);
@@ -1081,12 +1113,27 @@ export default function App() {
     }
   }
 
+  function handleTemplateAdminChange(nextTemplateAdminId: string) {
+    setTemplateAdminId(nextTemplateAdminId);
+    setAgents([]);
+    setSelectedAgentId('');
+    setLoadingAgentOptions(Boolean(nextTemplateAdminId));
+  }
+
   async function handleSaveTemplate() {
     if (!actorId || !selectedProjectId || !templateAdminId || !selectedAgentId) {
       return setFeedback('模板用户和模板助手都必须选择');
     }
 
     try {
+      if (loadingAgentOptions) {
+        return setFeedback('Template agent list is still loading. Please try again.');
+      }
+
+      if (!agents.some((agent) => agent.id === selectedAgentId)) {
+        return setFeedback('The selected template agent does not belong to the current template admin.');
+      }
+
       const result = await api.setTemplate(actorId, selectedProjectId, {
         templateUserId: templateAdminId,
         templateAgentId: selectedAgentId,
@@ -1314,8 +1361,9 @@ export default function App() {
                   loadingDetail={loadingDetail}
                   template={template}
                   templateAdminId={templateAdminId}
-                  setTemplateAdminId={setTemplateAdminId}
+                  handleTemplateAdminChange={handleTemplateAdminChange}
                   agents={agents}
+                  loadingAgentOptions={loadingAgentOptions}
                   selectedAgentId={selectedAgentId}
                   setSelectedAgentId={setSelectedAgentId}
                   copySkills={copySkills}
@@ -1447,8 +1495,9 @@ export default function App() {
                 loadingDetail={loadingDetail}
                 template={template}
                 templateAdminId={templateAdminId}
-                setTemplateAdminId={setTemplateAdminId}
+                handleTemplateAdminChange={handleTemplateAdminChange}
                 agents={agents}
+                loadingAgentOptions={loadingAgentOptions}
                 selectedAgentId={selectedAgentId}
                 setSelectedAgentId={setSelectedAgentId}
                 copySkills={copySkills}
@@ -1521,8 +1570,9 @@ export default function App() {
                 loadingDetail={loadingDetail}
                 template={template}
                 templateAdminId={templateAdminId}
-                setTemplateAdminId={setTemplateAdminId}
+                handleTemplateAdminChange={handleTemplateAdminChange}
                 agents={agents}
+                loadingAgentOptions={loadingAgentOptions}
                 selectedAgentId={selectedAgentId}
                 setSelectedAgentId={setSelectedAgentId}
                 copySkills={copySkills}
