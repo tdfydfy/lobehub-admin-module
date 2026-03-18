@@ -9,6 +9,7 @@ export type ActorContext = {
   actor: UserOption;
   isSystemAdmin: boolean;
   managedProjectCount: number;
+  joinedProjectCount: number;
 };
 
 export type ProjectSummary = {
@@ -23,6 +24,8 @@ export type ProjectSummary = {
   memberCount?: number;
   admin_count?: string;
   member_count?: string;
+  actorRole?: 'system_admin' | 'admin' | 'member';
+  actor_role?: 'system_admin' | 'admin' | 'member';
 };
 
 export type ProjectMember = {

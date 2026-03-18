@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ensureProjectAdminRequest } from '../auth.js';
+import { ensureProjectAdminRequest, ensureProjectMemberRequest } from '../auth.js';
 import { query } from '../db.js';
 
 const EXCLUDED_AGENT_SLUGS = ['inbox', 'page-agent', 'agent-builder', 'group-agent-builder'];
@@ -196,6 +196,12 @@ type ProjectTopicMessageRow = {
   created_at: string;
   updated_at: string;
 };
+
+function reportAccessError(message: string) {
+  const error = new Error(message);
+  (error as Error & { statusCode?: number }).statusCode = 403;
+  return error;
+}
 
 function getShanghaiDateParts(value: Date) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -404,8 +410,15 @@ function buildReportQueryParts(projectId: string, filters: ReportFilters) {
   };
 }
 
-function buildTopicStatsQueryParts(projectId: string, range: TopicStatsRange) {
+function buildTopicStatsQueryParts(projectId: string, range: TopicStatsRange, scopedUserId?: string) {
   const values: unknown[] = [projectId, range.startAt, range.endAt];
+  const memberConditions = ['pm.project_id = $1'];
+
+  if (scopedUserId) {
+    values.push(scopedUserId);
+    memberConditions.push(`pm.user_id = $${values.length}`);
+  }
+
   const cteSql = `
     with member_topic_base as (
       select
@@ -438,7 +451,7 @@ function buildTopicStatsQueryParts(projectId: string, range: TopicStatsRange) {
           and t.created_at >= $2::timestamptz
           and t.created_at < $3::timestamptz
       ) topic_stats on true
-      where pm.project_id = $1
+      where ${memberConditions.join(' and ')}
     )
   `;
 
@@ -613,10 +626,11 @@ export async function registerReportRoutes(app: FastifyInstance) {
   app.get('/api/projects/:projectId/reports/topic-stats', async (request) => {
     const params = z.object({ projectId: z.string().min(1) }).parse(request.params);
     const filters = topicStatsFiltersSchema.parse(request.query);
-    await ensureProjectAdminRequest(request, params.projectId);
+    const actor = await ensureProjectMemberRequest(request, params.projectId);
 
     const range = resolveTopicStatsRange(filters);
-    const { cteSql, values } = buildTopicStatsQueryParts(params.projectId, range);
+    const scopedUserId = actor.projectRole === 'member' ? actor.id : undefined;
+    const { cteSql, values } = buildTopicStatsQueryParts(params.projectId, range, scopedUserId);
     const offset = (filters.page - 1) * filters.pageSize;
 
     const [summaryResult, rowsResult] = await Promise.all([
@@ -720,7 +734,11 @@ export async function registerReportRoutes(app: FastifyInstance) {
       userId: z.string().min(1),
     }).parse(request.params);
     const filters = topicStatsFiltersSchema.parse(request.query);
-    await ensureProjectAdminRequest(request, params.projectId);
+    const actor = await ensureProjectMemberRequest(request, params.projectId);
+
+    if (actor.projectRole === 'member' && params.userId !== actor.id) {
+      throw reportAccessError('Project members can only view their own topics');
+    }
 
     const range = resolveTopicStatsRange(filters);
     const memberResult = await query<ProjectTopicListMemberRow>(
@@ -833,7 +851,11 @@ export async function registerReportRoutes(app: FastifyInstance) {
       projectId: z.string().min(1),
       topicId: z.string().min(1),
     }).parse(request.params);
-    await ensureProjectAdminRequest(request, params.projectId);
+    const actor = await ensureProjectMemberRequest(request, params.projectId);
+    const memberTopicFilterSql = actor.projectRole === 'member' ? 'and t.user_id = $3' : '';
+    const topicQueryValues = actor.projectRole === 'member'
+      ? [params.projectId, params.topicId, actor.id]
+      : [params.projectId, params.topicId];
 
     const topicResult = await query<ProjectTopicDetailRow>(
       `
@@ -859,9 +881,10 @@ export async function registerReportRoutes(app: FastifyInstance) {
         on managed_session.id = pma.managed_session_id
       where t.id = $2
         and t.session_id = pma.managed_session_id
+        ${memberTopicFilterSql}
       limit 1
       `,
-      [params.projectId, params.topicId],
+      topicQueryValues,
     );
 
     const topic = topicResult.rows[0];

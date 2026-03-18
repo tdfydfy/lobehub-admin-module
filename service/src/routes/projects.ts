@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ensureProjectAdmin, requireActor } from '../auth.js';
+import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
 
 type ManagedAssistantStatus = 'provisioned' | 'failed' | 'skipped' | null;
@@ -13,6 +13,7 @@ type ProjectSummaryRow = {
   updated_at: string;
   admin_count: string;
   member_count: string;
+  actor_role: 'system_admin' | 'admin' | 'member';
 };
 
 type MemberAssistantSummary = {
@@ -61,6 +62,12 @@ function memberMutationError(message: string) {
   return error;
 }
 
+function templateMutationError(message: string) {
+  const error = new Error(message);
+  (error as Error & { statusCode?: number }).statusCode = 409;
+  return error;
+}
+
 function mapProjectRow(row: ProjectSummaryRow) {
   return {
     id: row.id,
@@ -70,6 +77,7 @@ function mapProjectRow(row: ProjectSummaryRow) {
     updatedAt: row.updated_at,
     adminCount: Number(row.admin_count),
     memberCount: Number(row.member_count),
+    actorRole: row.actor_role,
   };
 }
 
@@ -83,6 +91,7 @@ async function fetchProjectsForActor(actorId: string, isSystemAdmin: boolean) {
         p.description,
         p.created_at,
         p.updated_at,
+        'system_admin'::text as actor_role,
         count(*) filter (where pm.role = 'admin')::text as admin_count,
         count(*) filter (where pm.role = 'member')::text as member_count
       from lobehub_admin.projects p
@@ -101,15 +110,15 @@ async function fetchProjectsForActor(actorId: string, isSystemAdmin: boolean) {
       p.description,
       p.created_at,
       p.updated_at,
+      pm_actor.role as actor_role,
       count(*) filter (where pm.role = 'admin')::text as admin_count,
       count(*) filter (where pm.role = 'member')::text as member_count
     from lobehub_admin.projects p
     join lobehub_admin.project_members pm_actor
       on pm_actor.project_id = p.id
      and pm_actor.user_id = $1
-     and pm_actor.role = 'admin'
     left join lobehub_admin.project_members pm on pm.project_id = p.id
-    group by p.id
+    group by p.id, pm_actor.role
     order by p.created_at desc
     `,
     [actorId],
@@ -214,6 +223,43 @@ async function assertAdminsRemain(
   }
 }
 
+async function assertTemplateSelectionValid(
+  executeQuery: typeof query,
+  projectId: string,
+  templateUserId: string,
+  templateAgentId: string,
+) {
+  const result = await executeQuery<{ is_admin: boolean; agent_belongs: boolean }>(
+    `
+    select
+      exists (
+        select 1
+        from lobehub_admin.project_members pm
+        where pm.project_id = $1
+          and pm.user_id = $2
+          and pm.role = 'admin'
+      ) as is_admin,
+      exists (
+        select 1
+        from public.agents a
+        where a.id = $3
+          and a.user_id = $2
+      ) as agent_belongs
+    `,
+    [projectId, templateUserId, templateAgentId],
+  );
+
+  const selection = result.rows[0];
+
+  if (!selection?.is_admin) {
+    throw templateMutationError('模板用户必须是项目管理员');
+  }
+
+  if (!selection.agent_belongs) {
+    throw templateMutationError('所选模板助手不属于当前模板管理员，请重新选择后再保存');
+  }
+}
+
 export async function registerProjectRoutes(app: FastifyInstance) {
   app.get('/api/users', async (request) => {
     const actor = await requireActor(request);
@@ -297,7 +343,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const actor = await requireActor(request);
     const params = z.object({ projectId: z.string().min(1) }).parse(request.params);
 
-    await ensureProjectAdmin(actor.id, params.projectId);
+    const projectAccess = await ensureProjectMember(actor.id, params.projectId);
 
     const result = await query<ProjectSummaryRow>(
       `
@@ -319,7 +365,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     );
 
     return {
-      project: result.rows[0] ? mapProjectRow(result.rows[0]) : null,
+      project: result.rows[0]
+        ? mapProjectRow({
+          ...result.rows[0],
+          actor_role: projectAccess.projectRole,
+        })
+        : null,
     };
   });
 
@@ -728,9 +779,10 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           where s.user_id = a.user_id
         ) as skill_count
       from public.agents a
-      where a.user_id = $1
-        and nullif(btrim(coalesce(a.title, '')), '') is not null
-        and coalesce(a.slug, '') not in ('inbox', 'page-agent', 'agent-builder', 'group-agent-builder')
+      where a.user_id::text = $1::text
+        and a.title is not null
+        and btrim(a.title) <> ''
+        and (a.slug is null or a.slug not in ('inbox', 'page-agent', 'agent-builder', 'group-agent-builder'))
       order by a.updated_at desc
       `,
       [queryParams.adminUserId],
@@ -754,10 +806,26 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     await ensureProjectAdmin(actor.id, params.projectId);
 
-    await query(
-      'select * from lobehub_admin.set_project_template($1, $2, $3, $4, $5)',
-      [params.projectId, body.templateUserId, body.templateAgentId, body.copySkills, actor.id],
-    );
+    await assertTemplateSelectionValid(query, params.projectId, body.templateUserId, body.templateAgentId);
+
+    try {
+      await query(
+        'select * from lobehub_admin.set_project_template($1, $2, $3, $4, $5)',
+        [params.projectId, body.templateUserId, body.templateAgentId, body.copySkills, actor.id],
+      );
+    } catch (error) {
+      const message = (error as Error).message;
+
+      if (message === 'Template user must be a project admin') {
+        throw templateMutationError('模板用户必须是项目管理员');
+      }
+
+      if (message.includes('does not belong to template user')) {
+        throw templateMutationError('所选模板助手不属于当前模板管理员，请重新选择后再保存');
+      }
+
+      throw error;
+    }
 
     const result = await fetchProjectTemplate(params.projectId);
 

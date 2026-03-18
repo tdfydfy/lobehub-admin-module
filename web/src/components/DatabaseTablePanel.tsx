@@ -277,9 +277,9 @@ export function DatabaseTablePanel({
 
   function toggleColumnVisibility(columnName: string) {
     setVisibleColumnNames((current) => {
-      const next = current && current.length > 0
-        ? current
-        : allColumns.map((column) => column.name);
+      const next = current === null
+        ? allColumns.map((column) => column.name)
+        : current;
 
       const updated = next.includes(columnName)
         ? next.filter((name) => name !== columnName)

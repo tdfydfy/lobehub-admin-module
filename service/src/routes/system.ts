@@ -4,7 +4,7 @@ import {
   authenticateAdminLogin,
   clearAdminSessionCookie,
   createAdminSession,
-  getManagedProjectCount,
+  getProjectAccessCounts,
   requireActor,
   revokeAdminSessionFromRequest,
   setAdminSessionCookie,
@@ -17,7 +17,7 @@ function toActorContext(actor: {
   avatar: string | null;
   displayName: string;
   isSystemAdmin: boolean;
-}, managedProjectCount: number) {
+}, managedProjectCount: number, joinedProjectCount: number) {
   return {
     actor: {
       id: actor.id,
@@ -27,6 +27,7 @@ function toActorContext(actor: {
     },
     isSystemAdmin: actor.isSystemAdmin,
     managedProjectCount,
+    joinedProjectCount,
   };
 }
 
@@ -42,7 +43,11 @@ export async function registerSystemRoutes(app: FastifyInstance) {
 
     setAdminSessionCookie(reply, session);
 
-    return toActorContext(loginResult.actor, loginResult.managedProjectCount);
+    return toActorContext(
+      loginResult.actor,
+      loginResult.managedProjectCount,
+      loginResult.joinedProjectCount,
+    );
   });
 
   app.post('/api/auth/logout', async (request, reply) => {
@@ -53,9 +58,9 @@ export async function registerSystemRoutes(app: FastifyInstance) {
 
   app.get('/api/me/context', async (request) => {
     const actor = await requireActor(request);
-    const managedProjectCount = await getManagedProjectCount(actor.id);
+    const accessCounts = await getProjectAccessCounts(actor.id);
 
-    return toActorContext(actor, managedProjectCount);
+    return toActorContext(actor, accessCounts.managedProjectCount, accessCounts.joinedProjectCount);
   });
 
   app.get('/api/system/status', async () => {

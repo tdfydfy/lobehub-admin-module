@@ -20,6 +20,12 @@ export type ActorIdentity = {
   isSystemAdmin: boolean;
 };
 
+export type ProjectActorAccessRole = 'system_admin' | 'admin' | 'member';
+
+export type ProjectActorAccess = ActorIdentity & {
+  projectRole: ProjectActorAccessRole;
+};
+
 type CredentialActorRow = {
   id: string;
   email: string | null;
@@ -27,6 +33,7 @@ type CredentialActorRow = {
   display_name: string;
   is_system_admin: boolean;
   managed_project_count: number;
+  joined_project_count: number;
   password_hash: string | null;
 };
 
@@ -204,6 +211,11 @@ async function findCredentialActorByEmail(email: string) {
         where pm.user_id = u.id
           and pm.role = 'admin'
       ) as managed_project_count,
+      (
+        select count(*)::int
+        from lobehub_admin.project_members pm
+        where pm.user_id = u.id
+      ) as joined_project_count,
       a.password as password_hash
     from public.users u
     join public.accounts a
@@ -279,6 +291,27 @@ export async function getManagedProjectCount(actorId: string) {
   return Number(result.rows[0]?.managed_project_count ?? 0);
 }
 
+export async function getProjectAccessCounts(actorId: string) {
+  const result = await query<{
+    managed_project_count: string;
+    joined_project_count: string;
+  }>(
+    `
+    select
+      count(*) filter (where pm.role = 'admin')::text as managed_project_count,
+      count(*)::text as joined_project_count
+    from lobehub_admin.project_members pm
+    where pm.user_id = $1
+    `,
+    [actorId],
+  );
+
+  return {
+    managedProjectCount: Number(result.rows[0]?.managed_project_count ?? 0),
+    joinedProjectCount: Number(result.rows[0]?.joined_project_count ?? 0),
+  };
+}
+
 export async function authenticateAdminLogin(email: string, password: string) {
   const row = await findCredentialActorByEmail(email);
 
@@ -290,8 +323,8 @@ export async function authenticateAdminLogin(email: string, password: string) {
     throw withStatus('邮箱或密码错误', 401);
   }
 
-  if (!row.is_system_admin && row.managed_project_count <= 0) {
-    throw withStatus('当前账号没有管理后台权限', 403);
+  if (!row.is_system_admin && row.joined_project_count <= 0) {
+    throw withStatus('当前账号没有可访问项目', 403);
   }
 
   return {
@@ -303,6 +336,7 @@ export async function authenticateAdminLogin(email: string, password: string) {
       isSystemAdmin: row.is_system_admin,
     },
     managedProjectCount: row.managed_project_count,
+    joinedProjectCount: row.joined_project_count,
   };
 }
 
@@ -408,7 +442,7 @@ export async function ensureSystemAdmin(actorId: string) {
   return actor;
 }
 
-export async function ensureProjectAdmin(actorId: string, projectId: string) {
+export async function ensureProjectMember(actorId: string, projectId: string): Promise<ProjectActorAccess> {
   const actor = await findActor(actorId);
 
   if (!actor) {
@@ -416,27 +450,48 @@ export async function ensureProjectAdmin(actorId: string, projectId: string) {
   }
 
   if (actor.isSystemAdmin) {
-    return actor;
+    return {
+      ...actor,
+      projectRole: 'system_admin',
+    };
   }
 
-  const accessResult = await query<{ exists: boolean }>(
+  const accessResult = await query<{ role: 'admin' | 'member' }>(
     `
-    select exists (
-      select 1
-      from lobehub_admin.project_members pm
-      where pm.project_id = $1
-        and pm.user_id = $2
-        and pm.role = 'admin'
-    ) as exists
+    select pm.role
+    from lobehub_admin.project_members pm
+    where pm.project_id = $1
+      and pm.user_id = $2
+    limit 1
     `,
     [projectId, actorId],
   );
 
-  if (!accessResult.rows[0]?.exists) {
+  const role = accessResult.rows[0]?.role;
+
+  if (!role) {
+    throw withStatus('Project member access required', 403);
+  }
+
+  return {
+    ...actor,
+    projectRole: role,
+  };
+}
+
+export async function ensureProjectAdmin(actorId: string, projectId: string) {
+  const access = await ensureProjectMember(actorId, projectId);
+
+  if (access.projectRole === 'member') {
     throw withStatus('Project admin access required', 403);
   }
 
-  return actor;
+  return access;
+}
+
+export async function ensureProjectMemberRequest(request: FastifyRequest, projectId: string) {
+  const actor = await requireActor(request);
+  return ensureProjectMember(actor.id, projectId);
 }
 
 export async function ensureProjectAdminRequest(request: FastifyRequest, projectId: string) {

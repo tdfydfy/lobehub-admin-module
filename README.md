@@ -1,5 +1,23 @@
 # LobeHub Admin Module
 
+## Update 2026-03-17
+
+- 成员登录与自有 Topic 查看第一阶段已落地。
+- 已补充真实场景的线上部署文档与生产环境示例文件。
+- 新增文档：
+  - `docs/member-topic-phase1.md`
+  - `docs/online-deployment-steps.md`
+  - `docs/template-agent-ownership-fix.md`
+  - `docs/upgrade-existing-deployment.md`
+- 新增环境文件：
+  - `service/.env.production.example`
+- 推荐阅读顺序：
+  1. `docs/member-topic-phase1.md`
+  2. `docs/online-deployment-steps.md`
+  3. `docs/upgrade-existing-deployment.md`
+  4. `service/.env.production.example`
+  5. `docs/deployment.md`
+
 独立于 `lobehub` 主应用部署的管理模块。
 
 目标：

@@ -1,4 +1,4 @@
-import { DatabaseTablePanel } from './components/DatabaseTablePanel';
+﻿import { DatabaseTablePanel } from './components/DatabaseTablePanel';
 import { useEffect, useState } from 'react';
 import { formatTimeToShanghai } from './lib/time';
 import { ProjectReportPanel } from './components/ProjectReportPanel';
@@ -17,8 +17,8 @@ import type {
 } from './types';
 
 type TabKey = 'members' | 'assistant' | 'data' | 'topic' | 'browser';
-type PortalMode = 'system' | 'workspace' | 'empty';
-type WorkbenchMode = 'system' | 'workspace';
+type PortalMode = 'system' | 'workspace' | 'member' | 'empty';
+type WorkbenchMode = 'system' | 'workspace' | 'member';
 type SystemPage = 'project-list' | 'project-create' | 'project-detail';
 
 function formatTime(value?: string | null) {
@@ -34,7 +34,21 @@ function normalizeProject(project: ProjectSummary) {
     updatedAt: project.updatedAt ?? project.updated_at ?? '',
     adminCount: project.adminCount ?? Number(project.admin_count ?? 0),
     memberCount: project.memberCount ?? Number(project.member_count ?? 0),
+    actorRole: project.actorRole ?? project.actor_role ?? 'member',
   };
+}
+
+type NormalizedProject = ReturnType<typeof normalizeProject>;
+
+function getPreferredProjectId(projects: NormalizedProject[]) {
+  return projects.find((project) => project.actorRole === 'admin')?.id ?? projects[0]?.id ?? '';
+}
+
+function getAccessFeedback(context: ActorContext, projects: NormalizedProject[]) {
+  if (context.isSystemAdmin) return `已进入系统管理员后台：${context.actor.displayName}`;
+  if (context.managedProjectCount > 0) return `已进入项目工作台：${context.actor.displayName}`;
+  if (projects.length > 0) return `已进入项目成员工作台：${context.actor.displayName}`;
+  return `当前用户没有可访问项目：${context.actor.displayName}`;
 }
 
 function getAssistantLabel(assistant: ProjectMemberAssistant) {
@@ -91,8 +105,9 @@ type WorkbenchProps = {
   loadingDetail: boolean;
   template: ProjectTemplate | null;
   templateAdminId: string;
-  setTemplateAdminId: (value: string) => void;
+  handleTemplateAdminChange: (value: string) => void;
   agents: AgentOption[];
+  loadingAgentOptions: boolean;
   selectedAgentId: string;
   setSelectedAgentId: (value: string) => void;
   copySkills: boolean;
@@ -127,8 +142,9 @@ function ProjectWorkbench({
   loadingDetail,
   template,
   templateAdminId,
-  setTemplateAdminId,
+  handleTemplateAdminChange,
   agents,
+  loadingAgentOptions,
   selectedAgentId,
   setSelectedAgentId,
   copySkills,
@@ -145,6 +161,7 @@ function ProjectWorkbench({
   handleDeleteProject,
 }: WorkbenchProps) {
   const rows = [...admins, ...members];
+  const hasCurrentAgentSelection = agents.some((agent) => agent.id === selectedAgentId);
 
   return (
     <>
@@ -332,7 +349,7 @@ function ProjectWorkbench({
 
             <label className="field">
               <span>模板管理员</span>
-              <select value={templateAdminId} onChange={(event) => setTemplateAdminId(event.target.value)}>
+              <select value={templateAdminId} onChange={(event) => handleTemplateAdminChange(event.target.value)}>
                 <option value="">请选择管理员</option>
                 {admins.map((admin) => (
                   <option key={admin.userId} value={admin.userId}>
@@ -341,6 +358,10 @@ function ProjectWorkbench({
                 ))}
               </select>
             </label>
+            {loadingAgentOptions ? <p className="muted">Loading template agents...</p> : null}
+            {!loadingAgentOptions && templateAdminId && agents.length === 0 ? (
+              <p className="muted">No template agents available for this admin.</p>
+            ) : null}
 
             <div className="agent-list">
               {agents.map((agent) => (
@@ -361,7 +382,11 @@ function ProjectWorkbench({
               <span>复制模板管理员的全部技能</span>
             </label>
 
-            <button className="primary wide" onClick={() => void handleSaveTemplate()}>
+            <button
+              className="primary wide"
+              disabled={loadingAgentOptions || !templateAdminId || !selectedAgentId || !hasCurrentAgentSelection}
+              onClick={() => void handleSaveTemplate()}
+            >
               保存模板配置
             </button>
           </section>
@@ -670,22 +695,106 @@ function SystemProjectCreatePage({
   );
 }
 
+type MemberProjectWorkspaceProps = {
+  actorId: string;
+  projectDetail: NormalizedProject;
+  projects: NormalizedProject[];
+  selectedProjectId: string;
+  setSelectedProjectId: (value: string) => void;
+  loadingDetail: boolean;
+  onFeedback: (value: string) => void;
+};
+
+function MemberProjectWorkspace({
+  actorId,
+  projectDetail,
+  projects,
+  selectedProjectId,
+  setSelectedProjectId,
+  loadingDetail,
+  onFeedback,
+}: MemberProjectWorkspaceProps) {
+  return (
+    <>
+      <section className="section workspace-switcher">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Workspace</p>
+            <h2>我的项目</h2>
+          </div>
+          {projects.length > 1 ? <span className="muted">共 {projects.length} 个项目</span> : null}
+        </div>
+
+        {projects.length > 1 ? (
+          <label className="field">
+            <span>当前项目</span>
+            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)}>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="muted">当前账号以项目成员身份进入工作台，仅开放自己的对话统计与详情查看。</p>
+        )}
+      </section>
+
+      <div className="hero-card">
+        <div>
+          <p className="eyebrow">Member Workspace</p>
+          <h2>{projectDetail.name}</h2>
+          <p>{projectDetail.description || '暂无项目描述'}</p>
+        </div>
+        <div className="hero-side">
+          <span>当前角色 项目成员</span>
+          <span>管理员 {projectDetail.adminCount}</span>
+          <span>成员 {projectDetail.memberCount}</span>
+          <span>更新时间 {formatTime(projectDetail.updatedAt)}</span>
+        </div>
+      </div>
+
+      <section className="section">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Access</p>
+            <h3>成员只读范围</h3>
+          </div>
+        </div>
+        <p className="muted">当前仅开放自己的托管 Topic 统计、Topic 清单和消息详情。</p>
+      </section>
+
+      {loadingDetail ? <p className="muted">正在加载项目详情...</p> : null}
+
+      {!loadingDetail ? (
+        <ProjectTopicStatsPanel
+          actorId={actorId}
+          projectId={projectDetail.id}
+          onFeedback={onFeedback}
+        />
+      ) : null}
+    </>
+  );
+}
+
 export default function App() {
   const [actorInput, setActorInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [actorId, setActorId] = useState('');
   const [actorContext, setActorContext] = useState<ActorContext | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projects, setProjects] = useState<NormalizedProject[]>([]);
   const [systemPage, setSystemPage] = useState<SystemPage>('project-list');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [projectReloadKey, setProjectReloadKey] = useState(0);
   const [selectedTab, setSelectedTab] = useState<TabKey>('members');
-  const [projectDetail, setProjectDetail] = useState<ProjectSummary | null>(null);
+  const [projectDetail, setProjectDetail] = useState<NormalizedProject | null>(null);
   const [admins, setAdmins] = useState<ProjectMember[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [template, setTemplate] = useState<ProjectTemplate | null>(null);
   const [templateAdminId, setTemplateAdminId] = useState('');
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [loadingAgentOptions, setLoadingAgentOptions] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [copySkills, setCopySkills] = useState(true);
   const [setDefaultAgent, setSetDefaultAgent] = useState(false);
@@ -710,6 +819,7 @@ export default function App() {
     templateAgentId: string | null;
     updatedAt: string | null;
   } | null>(null);
+  const selectedProjectRole = projects.find((project) => project.id === selectedProjectId)?.actorRole ?? null;
 
   useEffect(() => {
     const savedActorEmail = window.localStorage.getItem('lobehub-admin-last-email');
@@ -769,14 +879,8 @@ export default function App() {
         const normalizedProjects = projectsResult.projects.map(normalizeProject);
         setActorContext(contextResult);
         setProjects(normalizedProjects);
-        setSelectedProjectId(contextResult.isSystemAdmin ? '' : normalizedProjects[0]?.id ?? '');
-        setFeedback(
-          contextResult.isSystemAdmin
-            ? `已进入系统管理员后台：${contextResult.actor.displayName}`
-            : normalizedProjects.length > 0
-              ? `已进入项目工作台：${contextResult.actor.displayName}`
-              : `当前用户没有项目管理权限：${contextResult.actor.displayName}`,
-        );
+        setSelectedProjectId(contextResult.isSystemAdmin ? '' : getPreferredProjectId(normalizedProjects));
+        setFeedback(getAccessFeedback(contextResult, normalizedProjects));
       } catch (error) {
         if (cancelled) return;
         setActorContext(null);
@@ -798,7 +902,7 @@ export default function App() {
   }, [actorId]);
 
   useEffect(() => {
-    if (!actorContext || !selectedProjectId || !actorId) return;
+    if (!actorContext || !selectedProjectId || !actorId || !selectedProjectRole) return;
 
     let cancelled = false;
 
@@ -807,8 +911,26 @@ export default function App() {
       setLatestJobId('');
       setJob(null);
       setJobItems([]);
+      setAgents([]);
+      setLoadingAgentOptions(false);
 
       try {
+        if (selectedProjectRole === 'member') {
+          const projectResult = await api.getProject(actorId, selectedProjectId);
+
+          if (cancelled) return;
+
+          setProjectDetail(projectResult.project ? normalizeProject(projectResult.project) : null);
+          setAdmins([]);
+          setMembers([]);
+          setTemplate(null);
+          setTemplateAdminId('');
+          setSelectedAgentId('');
+          setCopySkills(true);
+          setFeedback(`已加载项目 ${selectedProjectId}`);
+          return;
+        }
+
         const [projectResult, membersResult, templateResult] = await Promise.all([
           api.getProject(actorId, selectedProjectId),
           api.getMembers(actorId, selectedProjectId),
@@ -840,25 +962,42 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [actorContext, actorId, selectedProjectId, projectReloadKey]);
+  }, [actorContext, actorId, selectedProjectId, selectedProjectRole, projectReloadKey]);
 
   useEffect(() => {
     if (!actorId || !selectedProjectId || !templateAdminId) {
       setAgents([]);
+      setLoadingAgentOptions(false);
       return;
     }
+
+    let cancelled = false;
+    setLoadingAgentOptions(true);
 
     void api
       .getAgents(actorId, selectedProjectId, templateAdminId)
       .then((result) => {
+        if (cancelled) return;
         setAgents(result.agents);
-        const hasSelectedAgent = result.agents.some((agent) => agent.id === selectedAgentId);
-        if (!hasSelectedAgent) {
-          setSelectedAgentId(result.agents[0]?.id ?? '');
-        }
+        setSelectedAgentId((current) =>
+          result.agents.some((agent) => agent.id === current) ? current : (result.agents[0]?.id ?? ''),
+        );
       })
-      .catch((error: Error) => setFeedback(error.message));
-  }, [actorId, selectedProjectId, templateAdminId, selectedAgentId]);
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setAgents([]);
+        setFeedback(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingAgentOptions(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [actorId, selectedProjectId, templateAdminId]);
 
   useEffect(() => {
     if (!actorId || !selectedProjectId || !latestJobId) return;
@@ -891,7 +1030,9 @@ export default function App() {
   const portalMode: PortalMode = actorContext?.isSystemAdmin
     ? 'system'
     : projects.length > 0
-      ? 'workspace'
+      ? selectedProjectRole === 'member'
+        ? 'member'
+        : 'workspace'
       : 'empty';
 
   useEffect(() => {
@@ -899,6 +1040,12 @@ export default function App() {
       setSystemPage('project-list');
     }
   }, [portalMode, selectedProjectId, systemPage]);
+
+  useEffect(() => {
+    if (portalMode === 'member' && selectedTab !== 'topic') {
+      setSelectedTab('topic');
+    }
+  }, [portalMode, selectedTab]);
 
   function resetProjectWorkspace() {
     setProjectDetail(null);
@@ -908,6 +1055,7 @@ export default function App() {
     setTemplateAdminId('');
     setSelectedAgentId('');
     setAgents([]);
+    setLoadingAgentOptions(false);
     setLatestJobId('');
     setJob(null);
     setJobItems([]);
@@ -939,8 +1087,9 @@ export default function App() {
           return current;
         }
 
-        return contextResult.isSystemAdmin ? '' : normalizedProjects[0]?.id ?? '';
+        return contextResult.isSystemAdmin ? '' : getPreferredProjectId(normalizedProjects);
       });
+      setFeedback(getAccessFeedback(contextResult, normalizedProjects));
     } catch (error) {
       setFeedback((error as Error).message);
     } finally {
@@ -1081,12 +1230,27 @@ export default function App() {
     }
   }
 
+  function handleTemplateAdminChange(nextTemplateAdminId: string) {
+    setTemplateAdminId(nextTemplateAdminId);
+    setAgents([]);
+    setSelectedAgentId('');
+    setLoadingAgentOptions(Boolean(nextTemplateAdminId));
+  }
+
   async function handleSaveTemplate() {
     if (!actorId || !selectedProjectId || !templateAdminId || !selectedAgentId) {
       return setFeedback('模板用户和模板助手都必须选择');
     }
 
     try {
+      if (loadingAgentOptions) {
+        return setFeedback('Template agent list is still loading. Please try again.');
+      }
+
+      if (!agents.some((agent) => agent.id === selectedAgentId)) {
+        return setFeedback('The selected template agent does not belong to the current template admin.');
+      }
+
       const result = await api.setTemplate(actorId, selectedProjectId, {
         templateUserId: templateAdminId,
         templateAgentId: selectedAgentId,
@@ -1172,7 +1336,15 @@ export default function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">LobeHub Admin Module</p>
-          <h1>{actorContext?.isSystemAdmin ? '系统管理员后台' : portalMode === 'workspace' ? '项目工作台' : '管理后台入口'}</h1>
+          <h1>
+            {actorContext?.isSystemAdmin
+              ? '系统管理员后台'
+              : portalMode === 'workspace'
+                ? '项目工作台'
+                : portalMode === 'member'
+                  ? '项目成员工作台'
+                  : '管理后台入口'}
+          </h1>
         </div>
 
         <div className="actor-box actor-actions">
@@ -1209,7 +1381,13 @@ export default function App() {
                 <strong>{actorContext.actor.displayName}</strong>
                 <span className="muted">{actorContext.actor.email ?? actorContext.actor.id}</span>
                 <span className="muted">
-                  {actorContext.isSystemAdmin ? '系统管理员' : `项目管理员 · 管理项目 ${projects.length}`}
+                  {actorContext.isSystemAdmin
+                    ? '系统管理员'
+                    : actorContext.managedProjectCount > 0
+                      ? actorContext.joinedProjectCount > actorContext.managedProjectCount
+                        ? `项目权限：管理 ${actorContext.managedProjectCount} / 参与 ${actorContext.joinedProjectCount}`
+                        : `项目管理员 · 管理项目 ${actorContext.managedProjectCount}`
+                      : `项目成员 · 参与项目 ${actorContext.joinedProjectCount}`}
                 </span>
               </div>
               <button className="ghost" onClick={() => void clearActor()}>
@@ -1236,7 +1414,7 @@ export default function App() {
             <div className="empty-state">
               <p className="eyebrow">Entry</p>
               <h2>先输入后台账号密码再进入管理台</h2>
-              <p>系统管理员会进入平台管理台，项目管理员会进入自己的项目工作台。</p>
+              <p>系统管理员会进入平台管理台，项目管理员和项目成员会进入自己可访问的项目工作台。</p>
             </div>
           </section>
         </main>
@@ -1314,8 +1492,9 @@ export default function App() {
                   loadingDetail={loadingDetail}
                   template={template}
                   templateAdminId={templateAdminId}
-                  setTemplateAdminId={setTemplateAdminId}
+                  handleTemplateAdminChange={handleTemplateAdminChange}
                   agents={agents}
+                  loadingAgentOptions={loadingAgentOptions}
                   selectedAgentId={selectedAgentId}
                   setSelectedAgentId={setSelectedAgentId}
                   copySkills={copySkills}
@@ -1447,8 +1626,9 @@ export default function App() {
                 loadingDetail={loadingDetail}
                 template={template}
                 templateAdminId={templateAdminId}
-                setTemplateAdminId={setTemplateAdminId}
+                handleTemplateAdminChange={handleTemplateAdminChange}
                 agents={agents}
+                loadingAgentOptions={loadingAgentOptions}
                 selectedAgentId={selectedAgentId}
                 setSelectedAgentId={setSelectedAgentId}
                 copySkills={copySkills}
@@ -1521,8 +1701,9 @@ export default function App() {
                 loadingDetail={loadingDetail}
                 template={template}
                 templateAdminId={templateAdminId}
-                setTemplateAdminId={setTemplateAdminId}
+                handleTemplateAdminChange={handleTemplateAdminChange}
                 agents={agents}
+                loadingAgentOptions={loadingAgentOptions}
                 selectedAgentId={selectedAgentId}
                 setSelectedAgentId={setSelectedAgentId}
                 copySkills={copySkills}
@@ -1540,13 +1721,34 @@ export default function App() {
             )}
           </section>
         </main>
+      ) : portalMode === 'member' ? (
+        <main className="workspace workspace-single">
+          <section className="panel panel-main">
+            {!selectedProjectId || !projectDetail ? (
+              <div className="empty-state">
+                <p className="eyebrow">Workspace</p>
+                <h2>当前没有可用项目</h2>
+              </div>
+            ) : (
+              <MemberProjectWorkspace
+                actorId={actorId}
+                projectDetail={projectDetail}
+                projects={projects}
+                selectedProjectId={selectedProjectId}
+                setSelectedProjectId={setSelectedProjectId}
+                loadingDetail={loadingDetail}
+                onFeedback={setFeedback}
+              />
+            )}
+          </section>
+        </main>
       ) : (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
             <div className="empty-state">
               <p className="eyebrow">No Access</p>
-              <h2>当前用户没有项目管理权限</h2>
-              <p>如果这是项目管理员账号，请先把它加入项目管理员列表；如果这是系统管理员账号，请加入 system_admins。</p>
+              <h2>当前用户没有可访问项目</h2>
+              <p>如果这是项目成员或项目管理员账号，请先把它加入项目成员列表；如果这是系统管理员账号，请加入 system_admins。</p>
             </div>
           </section>
         </main>

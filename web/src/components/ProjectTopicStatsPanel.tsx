@@ -518,8 +518,14 @@ export function ProjectTopicStatsPanel({
                             <span className="member-subtext">加入项目：{formatTime(row.joinedAt)}</span>
                           </td>
                           <td>
-                            <strong>{row.topicCount}</strong>
-                            <span className="member-subtext">{row.topicCount > 0 ? '点击成员查看清单' : '时间范围内无对话'}</span>
+                            {row.topicCount > 0 ? (
+                              <button className="table-link-button" onClick={() => openMemberTopics(row)}>
+                                {row.topicCount}
+                              </button>
+                            ) : (
+                              <strong>{row.topicCount}</strong>
+                            )}
+                            <span className="member-subtext">{row.topicCount > 0 ? '点击数量或成员查看清单' : '时间范围内无对话'}</span>
                           </td>
                           <td>{formatTime(row.firstTopicAt)}</td>
                           <td>{formatTime(row.lastTopicAt)}</td>
