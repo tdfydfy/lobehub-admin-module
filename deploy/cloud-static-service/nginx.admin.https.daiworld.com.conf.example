@@ -1,0 +1,157 @@
+# Dual-entry example for:
+# - HTTPS domains:
+#   - https://daiworld.com
+#   - https://www.daiworld.com
+# - HTTP IP fallback:
+#   - http://112.74.94.150
+#   - http://39.108.106.95
+
+server {
+  listen 80 default_server;
+  listen [::]:80 default_server;
+  server_name _;
+
+  client_max_body_size 20m;
+  root /srv/homepage;
+  index index.html;
+
+  location = / {
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    try_files /index.html =404;
+  }
+
+  location = /index.html {
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    try_files /index.html =404;
+  }
+
+  location / {
+    try_files $uri $uri/ =404;
+  }
+
+  location = /admin {
+    return 301 /admin/;
+  }
+
+  location /admin/ {
+    alias /srv/lobehub-admin/web/;
+    try_files $uri $uri/ /admin/index.html;
+  }
+
+  location = /admin/index.html {
+    alias /srv/lobehub-admin/web/index.html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+  }
+
+  location = /admin/database-viewer.html {
+    alias /srv/lobehub-admin/web/database-viewer.html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+  }
+
+  location /admin/assets/ {
+    alias /srv/lobehub-admin/web/assets/;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location = /admin-api {
+    return 301 /admin-api/;
+  }
+
+  location /admin-api/ {
+    proxy_pass http://lobehub-admin-service:3321/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name daiworld.com www.daiworld.com;
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl http2;
+  listen [::]:443 ssl http2;
+  server_name daiworld.com www.daiworld.com;
+
+  ssl_certificate /etc/letsencrypt/live/daiworld.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/daiworld.com/privkey.pem;
+
+  client_max_body_size 20m;
+  root /srv/homepage;
+  index index.html;
+
+  location = / {
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    try_files /index.html =404;
+  }
+
+  location = /index.html {
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+    try_files /index.html =404;
+  }
+
+  location / {
+    try_files $uri $uri/ =404;
+  }
+
+  location = /admin {
+    return 301 /admin/;
+  }
+
+  location /admin/ {
+    alias /srv/lobehub-admin/web/;
+    try_files $uri $uri/ /admin/index.html;
+  }
+
+  location = /admin/index.html {
+    alias /srv/lobehub-admin/web/index.html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+  }
+
+  location = /admin/database-viewer.html {
+    alias /srv/lobehub-admin/web/database-viewer.html;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header Expires "0" always;
+  }
+
+  location /admin/assets/ {
+    alias /srv/lobehub-admin/web/assets/;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location = /admin-api {
+    return 301 /admin-api/;
+  }
+
+  location /admin-api/ {
+    proxy_pass http://lobehub-admin-service:3321/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+}

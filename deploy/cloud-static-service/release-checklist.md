@@ -12,8 +12,11 @@
 
 - 已设置 `HOST=0.0.0.0`
 - 已设置正确的 `DATABASE_URL`
-- 已设置 `ADMIN_SESSION_SECURE_COOKIE=true`
+- 已根据当前入口策略设置 `ADMIN_SESSION_SECURE_COOKIE`
+  - 仅 HTTPS 域名：`true`
+  - HTTPS 域名 + HTTP IP 兜底：`false`
 - 已设置 `TRUST_PROXY=true`
+- 已设置 `CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95`
 - 已执行 `npm run build`
 
 ## Nginx
@@ -30,6 +33,8 @@
 
 - `/admin/` 首页可以打开
 - 登录后 cookie 正常写入
+- `https://daiworld.com/admin/` 可访问
+- `https://www.daiworld.com/admin/` 可访问
 - 项目列表能加载
 - 成员管理能正常增删改
 - 报表和对话统计能正常查询

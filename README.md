@@ -4,6 +4,7 @@
 
 - 成员登录与自有 Topic 查看第一阶段已落地。
 - 已补充真实场景的线上部署文档与生产环境示例文件。
+- 已补充 `daiworld.com` / `www.daiworld.com` HTTPS 支持与旧 IP 兜底升级指引。
 - 新增文档：
   - `docs/member-topic-phase1.md`
   - `docs/online-deployment-steps.md`

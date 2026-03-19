@@ -1,30 +1,30 @@
 # 已部署环境升级指引
 
-本文用于“已经部署过旧版管理端”的场景。
+本文面向“服务器上已经跑着旧版管理端”的场景。
 
-适用前提：
-- 服务器上已经存在 `/home/admin/lobehub-admin/service/`
-- 服务器上已经存在 `/home/admin/lobehub-admin/web/`
-- 服务器上已经存在 `/home/admin/lobehub-nginx/`
-- 当前管理端已经能通过 `/admin/` 和 `/admin-api/` 访问
+当前目标是升级到：
+- `https://daiworld.com`
+- `https://www.daiworld.com`
 
-这份文档解决的是“如何从旧版升级到新版”，不是从零部署。
+同时继续保留：
+- `http://112.74.94.150`
+- `http://39.108.106.95`
 
-## 1. 本次升级建议一起带上的内容
+作为兜底入口。
 
-本次建议同步以下变更：
+## 1. 本次升级要一起带上的内容
+
+建议本次一起同步：
 - 成员登录与自有 Topic 查看
 - 模板管理员 / 模板助手归属校验修复
 - `/api/projects/:projectId/agents` 的 `rt_fetch used out-of-bounds` 规避
-- 网关对 SPA HTML 入口加 `no-cache` 响应头
-
-说明：
-- 最后一项要求同步更新网关配置文件 `default.conf`
-- 如果只更新 `web/dist`，但不更新网关配置，浏览器仍可能继续使用旧 HTML
+- 双域名 HTTPS 支持
+- HTTP IP 兜底入口保留
+- SPA HTML `no-cache` 网关头
 
 ## 2. 升级前备份
 
-建议至少备份以下文件：
+至少备份：
 
 ```bash
 cp /home/admin/lobehub-admin/service/.env /home/admin/lobehub-admin/service/.env.bak.$(date +%F-%H%M%S)
@@ -32,9 +32,7 @@ cp /home/admin/lobehub-nginx/conf.d/default.conf /home/admin/lobehub-nginx/conf.
 cp /home/admin/lobehub-nginx/docker-compose.gateway-admin.yml /home/admin/lobehub-nginx/docker-compose.gateway-admin.yml.bak.$(date +%F-%H%M%S)
 ```
 
-## 3. 本地更新代码并重新构建
-
-在本地仓库更新代码后，重新构建：
+## 3. 本地更新并重新构建
 
 ```powershell
 cd D:\lobe-hub2\lobehub-admin-module\service
@@ -50,15 +48,13 @@ npm run build
 
 ### 4.1 后端
 
-建议同步整个 `service/` 目录到服务器，但不要覆盖线上 `.env`：
-
-目标目录：
+同步到：
 
 ```text
 /home/admin/lobehub-admin/service/
 ```
 
-至少要同步：
+至少同步：
 - `service/dist/`
 - `service/src/`
 - `service/package.json`
@@ -66,132 +62,133 @@ npm run build
 
 ### 4.2 前端
 
-将新的 `web/dist/` 内容覆盖上传到：
+覆盖上传：
 
 ```text
 /home/admin/lobehub-admin/web/
 ```
 
+来源是新的 `web/dist/`。
+
 ### 4.3 网关
 
-如果这次要一起修复“升级后浏览器仍使用旧 HTML”的问题，必须同步：
+这次升级如果要同时支持：
+- `https://daiworld.com`
+- `https://www.daiworld.com`
+- 旧 IP HTTP 兜底
 
-- [default.conf](/D:/lobe-hub2/deploy/lobehub-gateway/default.conf)
+则必须同步新的 Nginx 配置。
 
-覆盖到：
+建议参考：
+
+- [deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example)
+
+把等价配置覆盖到：
 
 ```text
 /home/admin/lobehub-nginx/conf.d/default.conf
 ```
 
-如果网关 compose 模板也有调整，再同步：
+## 5. 线上 `.env` 要改什么
 
-- [docker-compose.gateway-admin.yml](/D:/lobe-hub2/deploy/lobehub-gateway/docker-compose.gateway-admin.yml)
-
-覆盖到：
+服务器上已有：
 
 ```text
-/home/admin/lobehub-nginx/docker-compose.gateway-admin.yml
+/home/admin/lobehub-admin/service/.env
 ```
 
-## 5. 服务器端重新安装依赖并构建后端
+这次请重点改成：
 
-进入：
+```env
+HOST=0.0.0.0
+CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95
+ADMIN_SESSION_SECURE_COOKIE=false
+TRUST_PROXY=true
+```
+
+### 为什么这里还是 `false`
+
+因为你要求保留旧 IP 登录兜底。
+
+只要还保留：
+- `http://112.74.94.150/admin/`
+- `http://39.108.106.95/admin/`
+
+就不能把 cookie 改成 `Secure=true`，否则 IP HTTP 入口登录会失效。
+
+如果将来完全停止 IP 登录入口，再改成：
+
+```env
+ADMIN_SESSION_SECURE_COOKIE=true
+```
+
+并把 `CORS_ORIGIN` 收紧到两个 HTTPS 域名。
+
+## 6. 服务器端重装依赖并构建后端
 
 ```bash
 cd /home/admin/lobehub-admin/service
-```
-
-执行：
-
-```bash
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm install
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm run build
 ```
 
-说明：
-- 即使后端依赖没有明显变化，也建议执行一次 `npm install`
-- 这样可以避免 `package-lock.json` 或间接依赖变化导致容器启动异常
-
-## 6. 重启服务
-
-进入：
+## 7. 重启服务
 
 ```bash
 cd /home/admin/lobehub-nginx
-```
-
-执行：
-
-```bash
 docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehub-admin-service nginx-gateway
 ```
 
-如果只更新了后端，没有改网关配置，也至少执行：
+## 8. 升级后验证
 
-```bash
-docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehub-admin-service
-```
+### HTTPS 域名
 
-## 7. 升级后验证
+检查：
+- `https://daiworld.com/admin/`
+- `https://www.daiworld.com/admin/`
+- `https://daiworld.com/admin-api/health`
+- `https://www.daiworld.com/admin-api/health`
 
-先做服务器内验证：
+### HTTP IP 兜底
 
-```bash
-curl http://127.0.0.1/admin-api/health
-curl -I http://127.0.0.1/admin/
-curl -I http://127.0.0.1/admin/database-viewer.html
-```
+检查：
+- `http://112.74.94.150/admin/`
+- `http://39.108.106.95/admin/`
 
-再做功能验证：
-- 系统管理员可以登录
-- 项目管理员可以登录并打开模板配置页
-- 切换模板管理员后，模板助手列表会刷新
-- 选错模板助手时，保存模板会返回明确业务错误
-- 项目成员可以登录并查看自己的 Topic
-- 数据查看页“全清空后再单选一列”的列显隐逻辑正常
+### 功能项
 
-## 8. 当前版本升级特别提醒
+重点验证：
+- 两个域名都能登录
+- IP 兜底入口仍能登录
+- 模板管理员切换后，模板助手列表会刷新
+- 选错模板助手时，保存模板返回明确业务错误
+- 成员能登录并查看自己的 Topic
+- `/api/projects/:projectId/agents` 不再报 `rt_fetch used out-of-bounds`
 
-### 8.1 模板配置页
+## 9. 升级特别提醒
 
-本次升级后：
-- 切换模板管理员会清空旧助手选择
-- 助手列表加载中时不能保存
-- 如果助手不属于当前模板管理员，会直接阻止保存
+### 9.1 这次是双域名 + IP 混合阶段
 
-### 8.2 `rt_fetch` 相关问题
+所以当前建议：
+- 域名入口走 HTTPS
+- IP 入口继续保留 HTTP
+- Cookie 暂时不要切 `Secure=true`
 
-本次已经修复一个可复现路径：
-- `GET /api/projects/:projectId/agents`
+### 9.2 如果前端更新后还是旧页面
 
-如果线上旧版的模板配置页之前经常在加载助手时报：
+请确认：
+- 已同步新的 `default.conf`
+- 已重启 `nginx-gateway`
 
-```text
-rt_fetch used out-of-bounds
-```
+因为这次网关配置包含 SPA HTML 的 `no-cache` 头修复。
 
-升级后应优先验证该问题是否消失。
+## 10. 回滚方式
 
-### 8.3 浏览器缓存
-
-本次网关模板已给以下 HTML 入口加了 `no-cache`：
-- `/`
-- `/index.html`
-- `/admin/index.html`
-- `/admin/database-viewer.html`
-
-因此升级后：
-- 一般不需要再手工强刷浏览器缓存
-- 但前提是你已经同步了新的 `default.conf` 并重启 `nginx-gateway`
-
-## 9. 回滚方式
-
-如果升级后发现异常，可按以下方式回滚：
+如果升级后发现异常：
 
 1. 恢复备份的 `.env`
 2. 恢复备份的 `default.conf`
-3. 恢复旧版 `service/` 与 `web/` 文件
+3. 恢复旧版 `service/` 与 `web/`
 4. 再执行：
 
 ```bash

@@ -1,22 +1,28 @@
 # 线上部署具体步骤
 
-这份文档按当前真实场景编写，不再使用泛化的 `your-domain.com` 占位方式。
+本文按当前目标场景编写：
 
-当前真实场景：
-- 管理端通过公网 IP 访问，而不是正式域名
-- 生产访问 IP：`112.74.94.150`
-- 测试访问 IP：`39.108.106.95`
-- 管理前端路径：`/admin/`
-- 管理后端路径：`/admin-api/`
-- LobeHub 主站仍独立走 `3210` 端口
+- 正式域名：
+  - `https://daiworld.com`
+  - `https://www.daiworld.com`
+- 继续保留旧 IP 兜底入口：
+  - `http://112.74.94.150`
+  - `http://39.108.106.95`
+- 管理端前端：
+  - `/admin/`
+- 管理端后端：
+  - `/admin-api/`
 
-当前真实访问地址：
-- 生产管理端首页：`http://112.74.94.150/admin/`
-- 生产管理端健康检查：`http://112.74.94.150/admin-api/health`
-- 生产 LobeHub 主站：`http://112.74.94.150:3210/`
-- 测试管理端首页：`http://39.108.106.95/admin/`
-- 测试管理端健康检查：`http://39.108.106.95/admin-api/health`
-- 测试 LobeHub 主站：`http://39.108.106.95:3210/`
+当前推荐访问方式：
+- 正式入口：
+  - `https://daiworld.com/admin/`
+  - `https://www.daiworld.com/admin/`
+- API 健康检查：
+  - `https://daiworld.com/admin-api/health`
+  - `https://www.daiworld.com/admin-api/health`
+- IP 兜底入口：
+  - `http://112.74.94.150/admin/`
+  - `http://39.108.106.95/admin/`
 
 ## 1. 目录结构
 
@@ -33,25 +39,20 @@
 - `/home/admin/lobehub/`
   主站目录
 - `/home/admin/lobehub-admin/service/`
-  管理端后端目录
+  管理端后端
 - `/home/admin/lobehub-admin/web/`
-  管理端前端静态文件目录
+  管理端前端静态文件
 - `/home/admin/lobehub-nginx/`
-  网关 compose 与 Nginx 配置目录
+  网关 compose 与 Nginx 配置
 - `/home/admin/homepage/`
-  门户首页静态文件目录
+  站点根路径首页静态文件
 
 ## 2. 数据库准备
 
-在目标 PostgreSQL / Neon 执行以下脚本：
+在目标 PostgreSQL / Neon 执行：
 
-1. 核心 schema
-   文件： [001_project_admin_core.sql](/D:/lobe-hub2/lobehub-admin-module/sql/001_project_admin_core.sql)
-
-2. 如存在旧自动下发逻辑，再执行关闭脚本
-   文件： [002_disable_global_auto_provision.sql](/D:/lobe-hub2/lobehub-admin-module/sql/002_disable_global_auto_provision.sql)
-
-如果是 Neon，直接在 SQL Editor 中执行即可。
+1. [001_project_admin_core.sql](/D:/lobe-hub2/lobehub-admin-module/sql/001_project_admin_core.sql)
+2. 如存在旧自动下发逻辑，再执行 [002_disable_global_auto_provision.sql](/D:/lobe-hub2/lobehub-admin-module/sql/002_disable_global_auto_provision.sql)
 
 ## 3. 本地构建
 
@@ -65,11 +66,9 @@ npm run build
 
 ### 3.2 构建前端
 
-前端生产环境文件已经是当前真实场景需要的值：
+前端生产环境继续使用：
 
 文件： [web/.env.production](/D:/lobe-hub2/lobehub-admin-module/web/.env.production)
-
-内容：
 
 ```env
 VITE_PUBLIC_BASE=/admin/
@@ -84,46 +83,33 @@ npm install
 npm run build
 ```
 
-构建产物目录：
+## 4. 上传文件
 
-```text
-web/dist/
-```
+### 4.1 后端
 
-## 4. 上传文件到服务器
-
-### 4.1 管理端后端
-
-上传整个 `service/` 目录到：
+上传到：
 
 ```text
 /home/admin/lobehub-admin/service/
 ```
 
-### 4.2 管理端前端
+### 4.2 前端
 
-将本地 [web/dist](/D:/lobe-hub2/lobehub-admin-module/web/dist) 中的文件上传到：
+将 [web/dist](/D:/lobe-hub2/lobehub-admin-module/web/dist) 内容上传到：
 
 ```text
 /home/admin/lobehub-admin/web/
 ```
 
-上传后至少应包含：
-- `index.html`
-- `database-viewer.html`
-- `assets/`
+### 4.3 网关
 
-### 4.3 网关文件
+当前建议使用 HTTPS 双域名 + HTTP IP 兜底的 Nginx 示例文件：
 
-将以下文件上传到服务器：
+- [deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example)
 
-- [docker-compose.gateway-admin.yml](/D:/lobe-hub2/deploy/lobehub-gateway/docker-compose.gateway-admin.yml)
-- [default.conf](/D:/lobe-hub2/deploy/lobehub-gateway/default.conf)
-
-目标路径：
+如果你仍沿用 Docker 网关目录部署，则把等价配置同步到：
 
 ```text
-/home/admin/lobehub-nginx/docker-compose.gateway-admin.yml
 /home/admin/lobehub-nginx/conf.d/default.conf
 ```
 
@@ -135,17 +121,17 @@ web/dist/
 /home/admin/lobehub-admin/service/.env
 ```
 
-直接参考新建的生产示例文件：
+直接参考：
 
-文件： [service/.env.production.example](/D:/lobe-hub2/lobehub-admin-module/service/.env.production.example)
+- [service/.env.production.example](/D:/lobe-hub2/lobehub-admin-module/service/.env.production.example)
 
-当前真实场景建议值：
+当前目标场景建议值：
 
 ```env
 PORT=3321
 HOST=0.0.0.0
 DATABASE_URL=postgresql://username:password@host/database?sslmode=require&channel_binding=require
-CORS_ORIGIN=http://112.74.94.150,http://39.108.106.95
+CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95
 ADMIN_SESSION_COOKIE_NAME=lobehub_admin_session
 ADMIN_SESSION_TTL_HOURS=12
 ADMIN_SESSION_SECURE_COOKIE=false
@@ -153,153 +139,99 @@ ALLOW_LEGACY_ACTOR_HEADER=false
 TRUST_PROXY=true
 ```
 
-说明：
-- `HOST=0.0.0.0`
-  因为后端要被同 Docker 网络中的 Nginx 网关访问
-- `CORS_ORIGIN`
-  当前真实场景是两个公网 IP，所以直接写：
-  `http://112.74.94.150,http://39.108.106.95`
-- `ADMIN_SESSION_SECURE_COOKIE=false`
-  当前真实场景仍然是 HTTP + IP，不是 HTTPS 域名，不能打开 Secure
-- `TRUST_PROXY=true`
-  当前网关在前，建议保持开启
+### 为什么这里仍然是 `ADMIN_SESSION_SECURE_COOKIE=false`
 
-## 6. 在服务器安装依赖并构建后端
+因为你明确要求保留旧 IP 入口兜底。
 
-进入目录：
+如果还要支持：
+
+- `http://112.74.94.150/admin/`
+- `http://39.108.106.95/admin/`
+
+那么登录 cookie 不能强制设成 `Secure=true`，否则通过 HTTP IP 访问时 cookie 不会写入，登录会直接失效。
+
+结论：
+- 如果要“HTTPS 域名 + HTTP IP 兜底”同时可用，当前必须保持 `false`
+- 只有在你彻底下线旧 IP 登录入口之后，才能改成 `true`
+
+## 6. Nginx / HTTPS 关键点
+
+当前建议的网关策略是：
+
+1. `daiworld.com` 与 `www.daiworld.com` 的 HTTP 请求统一 301 到 HTTPS
+2. 两个域名的 HTTPS 请求正常提供 `/`、`/admin/`、`/admin-api/`
+3. 对公网 IP 的 HTTP 请求继续保留原能力，作为兜底入口
+
+证书建议：
+- `daiworld.com`
+- `www.daiworld.com`
+
+证书文件路径在示例中使用：
+
+```text
+/etc/letsencrypt/live/daiworld.com/fullchain.pem
+/etc/letsencrypt/live/daiworld.com/privkey.pem
+```
+
+如你的证书路径不同，按实际服务器路径替换即可。
+
+## 7. 服务器端重新安装依赖并构建后端
 
 ```bash
 cd /home/admin/lobehub-admin/service
-```
-
-执行：
-
-```bash
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm install
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm run build
 ```
 
-## 7. 启动网关与管理端后端
-
-进入目录：
+## 8. 启动或重启服务
 
 ```bash
 cd /home/admin/lobehub-nginx
+docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehub-admin-service nginx-gateway
 ```
 
-启动：
+## 9. 验证
 
-```bash
-docker compose -f docker-compose.gateway-admin.yml up -d
+### HTTPS 域名入口
+
+```text
+https://daiworld.com/admin/
+https://www.daiworld.com/admin/
+https://daiworld.com/admin-api/health
+https://www.daiworld.com/admin-api/health
 ```
 
-当前模板会启动：
-- `lobehub-admin-service`
-- `nginx-gateway`
-
-当前网关模板已包含一项额外修复：
-- `/`
-- `/index.html`
-- `/admin/index.html`
-- `/admin/database-viewer.html`
-
-这些 HTML 入口会强制返回 `no-cache` 头，避免服务升级后浏览器继续使用旧的 SPA HTML。
-
-同时：
-- `/admin/assets/` 会返回长期缓存头
-- 哈希文件可继续安全缓存
-
-## 8. 访问验证
-
-服务器内验证：
-
-```bash
-curl http://127.0.0.1/admin-api/health
-curl -I http://127.0.0.1/admin/
-curl -I http://127.0.0.1/admin/database-viewer.html
-```
-
-公网验证：
+### HTTP IP 兜底入口
 
 ```text
 http://112.74.94.150/admin/
-http://112.74.94.150/admin-api/health
 http://39.108.106.95/admin/
-http://39.108.106.95/admin-api/health
 ```
 
-主站入口验证：
+### 需要重点确认
 
-```text
-http://112.74.94.150:3210/
-http://39.108.106.95:3210/
-```
+- 两个 HTTPS 域名都能打开管理端
+- 两个 HTTPS 域名都能正常登录
+- 旧 IP 入口仍能正常登录
+- `/admin/` 静态资源加载正常
+- `/admin-api/health` 返回成功
 
-如果刚更新了前端文件但浏览器仍显示旧界面，先确认服务器上已同步最新的：
-- `deploy/lobehub-gateway/default.conf`
-- `/home/admin/lobehub-nginx/conf.d/default.conf`
+## 10. 当前阶段的建议
 
-然后重启网关：
-
-```bash
-cd /home/admin/lobehub-nginx
-docker compose -f docker-compose.gateway-admin.yml up -d
-```
-
-## 9. 当前真实场景下的几个关键点
-
-### 9.1 不能把 cookie 设成 Secure
-
-因为当前还没切 HTTPS 域名，还是通过 `http://IP/` 访问，所以：
+如果你后续确认不再需要旧 IP 登录兜底，再做这一步：
 
 ```env
-ADMIN_SESSION_SECURE_COOKIE=false
+ADMIN_SESSION_SECURE_COOKIE=true
 ```
 
-### 9.2 前端不需要写死公网 host
-
-前端生产环境继续使用：
+同时把 `CORS_ORIGIN` 收紧为：
 
 ```env
-VITE_PUBLIC_BASE=/admin/
-VITE_API_BASE_URL=/admin-api
+CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com
 ```
-
-这样静态页部署到任意一个公网 IP 后，都能自动走当前站点下的 `/admin-api`。
-
-### 9.3 当前网关不绑定特定域名
-
-当前 [default.conf](/D:/lobe-hub2/deploy/lobehub-gateway/default.conf) 使用：
-
-```nginx
-server_name _;
-```
-
-这是对的，因为当前真实场景就是按 IP 提供访问。
-
-## 10. 后续如果切 HTTPS 域名
-
-如果后续从 IP 访问切到正式域名，再做以下调整：
-
-1. 将 `CORS_ORIGIN` 改成正式域名
-2. 将 `ADMIN_SESSION_SECURE_COOKIE` 改为 `true`
-3. 保持前端：
-   `VITE_PUBLIC_BASE=/admin/`
-   `VITE_API_BASE_URL=/admin-api`
-4. 由外层网关或证书服务提供 HTTPS
-
-在当前阶段，不要提前把这几项改成域名版，否则登录 cookie 会直接失效。
 
 ## 11. 已部署环境升级
 
-如果服务器上已经部署过旧版管理端，不需要从头重装。
-
-请直接参考：
+如果服务器上已经部署过旧版管理端，请直接参考：
 
 - [upgrade-existing-deployment.md](/D:/lobe-hub2/lobehub-admin-module/docs/upgrade-existing-deployment.md)
-
-升级时重点注意：
-- 同步新的 `service/` 后端代码
-- 覆盖新的 `web/dist/`
-- 同步新的 `default.conf`
-- 重启 `lobehub-admin-service` 与 `nginx-gateway`
