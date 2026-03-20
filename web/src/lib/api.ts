@@ -6,6 +6,7 @@ import type {
   JobDetail,
   JobItem,
   ProjectMember,
+  ProjectMemberAssistantDetail,
   ProjectReportFilters,
   ProjectReportResult,
   ProjectTopicDetailResult,
@@ -116,18 +117,6 @@ export const api = {
       actorId,
     }),
 
-  getSystemStatus: async () =>
-    request<{
-      legacyAutoProvision: {
-        triggerInstalled: boolean;
-        triggerEnabled: boolean;
-        configEnabled: boolean | null;
-        templateUserId: string | null;
-        templateAgentId: string | null;
-        updatedAt: string | null;
-      };
-    }>('/api/system/status'),
-
   listDatabaseTables: async (actorId: string) =>
     request<DatabaseTableListResult>('/api/system/database/tables', {
       actorId,
@@ -176,6 +165,19 @@ export const api = {
     request<{ admins: ProjectMember[]; members: ProjectMember[] }>(`/api/projects/${projectId}/members`, {
       actorId,
     }),
+
+  getProjectMemberAssistantDetail: async (
+    actorId: string,
+    projectId: string,
+    userId: string,
+    assistantId: string,
+  ) =>
+    request<{ assistant: ProjectMemberAssistantDetail }>(
+      `/api/projects/${projectId}/agents?userId=${encodeURIComponent(userId)}&agentId=${encodeURIComponent(assistantId)}`,
+      {
+        actorId,
+      },
+    ),
 
   addMembers: async (actorId: string, projectId: string, emails: string[], role: 'admin' | 'member') =>
     request<{

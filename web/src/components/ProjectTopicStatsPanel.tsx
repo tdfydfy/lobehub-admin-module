@@ -673,7 +673,7 @@ export function ProjectTopicStatsPanel({
                 </div>
               ) : (
                 <div className="empty-card">
-                  <p>当前对话下没有消息内容。</p>
+                  <p>当前对话下没有可展示的消息内容。</p>
                 </div>
               )
             ) : null}

@@ -51,8 +51,24 @@
 
 在目标 PostgreSQL / Neon 执行：
 
-1. [001_project_admin_core.sql](/D:/lobe-hub2/lobehub-admin-module/sql/001_project_admin_core.sql)
+1. 新环境执行 [001_project_admin_core.sql](/D:/lobe-hub2/lobehub-admin-module/sql/001_project_admin_core.sql)
 2. 如存在旧自动下发逻辑，再执行 [002_disable_global_auto_provision.sql](/D:/lobe-hub2/lobehub-admin-module/sql/002_disable_global_auto_provision.sql)
+3. 如果是已部署旧环境，按需追加执行：
+   - [005_check_project_managed_mapping_health.sql](/D:/lobe-hub2/lobehub-admin-module/sql/005_check_project_managed_mapping_health.sql)
+   - [003_fix_provision_skip_requires_session.sql](/D:/lobe-hub2/lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql)
+   - [004_repair_project_managed_mappings.sql](/D:/lobe-hub2/lobehub-admin-module/sql/004_repair_project_managed_mappings.sql)
+
+说明：
+- `001` 是新库全量安装。
+- `005` 是升级前只读自检。
+- `003` 是函数增量升级。
+- `004` 是一次性修复已有 `project_managed_agents` 映射中的官方助手/官方会话指针。
+- 本地 Docker `postgres` 环境可直接执行：
+
+```powershell
+.\lobehub-admin-module\scripts\check-project-admin-mappings.ps1
+.\lobehub-admin-module\scripts\upgrade-existing-project-admin.ps1
+```
 
 ## 3. 本地构建
 

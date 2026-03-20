@@ -3,7 +3,7 @@ param(
   [string]$ComposeFile = "docker-compose.yml",
 
   [Parameter(Mandatory = $false)]
-  [string]$SqlFile = "sql/001_project_admin_core.sql"
+  [string]$SqlFile = "sql/005_check_project_managed_mapping_health.sql"
 )
 
 . (Join-Path $PSScriptRoot "_admin-common.ps1")
@@ -14,9 +14,6 @@ $resolvedSqlFile = Resolve-AdminSqlPath -SqlPath $SqlFile -ScriptRoot $PSScriptR
 Invoke-ComposeSqlFile `
   -ComposeFile $resolvedComposeFile `
   -SqlFile $resolvedSqlFile `
-  -Message "Applying project admin core schema from $resolvedSqlFile ..."
-
-Write-Host "==> Installed objects in schema lobehub_admin:"
-docker compose -f $resolvedComposeFile exec -T postgres psql -U lobehub -d lobehub -c "\dt lobehub_admin.*" | Out-Host
+  -Message "Checking project managed assistant mapping health ..."
 
 Write-Host "Done."

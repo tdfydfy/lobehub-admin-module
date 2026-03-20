@@ -1,5 +1,43 @@
 # LobeHub Admin Module
 
+## Update 2026-03-20
+
+- 修复“对话统计 -> Topic 详情”消息展示口径：
+  - 不再展示大量空的中间 assistant/system 占位消息
+  - 仍然排除 `tool`
+  - Topic 详情按 `topic_id` 聚合可见消息，兼容 assistant 最终结论消息 `session_id = null` 的落库情况
+  - Topic 列表里的 `messageCount` / `preview` 同步改为只统计和展示可见消息
+- 修复成员管理页的项目助手信息展示：
+  - 恢复“最近更新”时间字段
+  - 清理重复文案，只保留一份助手名称和更新时间
+  - 成员表中点击助手名称可展开查看助手详情
+- 新增成员助手详情展开能力：
+  - 可查看提示词 `system_role`
+  - 可查看开场白、开场问题
+  - 可查看模型/provider、对话配置、模型参数
+  - 可查看当前助手启用的技能清单，以及未匹配到本地 skill 记录的插件标识
+- 已完成线上验证：
+  - `ali-temp`
+  - `ali-2c2g`
+
+## Update 2026-03-19
+
+- 已移除旧的“注册后自动赋予助手”状态查询与页面提示。
+- 批量配置/刷新已改为“API 快速返回 + 服务进程后台执行”。
+- 批量配置/刷新已增加项目级并发保护：
+  - 同一项目已有 `pending/running` 任务时，后端拒绝再次创建
+  - 前端在任务运行中会禁用批量操作按钮
+- 批量任务现在会在创建时固化成员快照，不再执行时重新扫描当前成员列表。
+- 已明确“官方助手”唯一规则：
+  - 每个 `(project_id, user_id)` 只维护 1 个官方助手和 1 个官方会话
+  - 官方身份只看 `project_managed_agents` 映射，不看助手标题
+- Topic 统计页已收敛为用户视角：
+  - Topic 列表“消息数”只统计可见消息
+  - Topic 详情只展示用户真正可见的消息
+- 已新增增量 SQL：
+  - `sql/003_fix_provision_skip_requires_session.sql`
+  - `sql/004_repair_project_managed_mappings.sql`
+
 ## Update 2026-03-17
 
 - 成员登录与自有 Topic 查看第一阶段已落地。
@@ -49,7 +87,12 @@
 - `docs/roadmap.md`：阶段拆解与开发顺序
 - `sql/001_project_admin_core.sql`：核心表与函数
 - `sql/002_disable_global_auto_provision.sql`：可选关闭全局自动下发
+- `sql/003_fix_provision_skip_requires_session.sql`：已部署环境的函数增量升级
+- `sql/004_repair_project_managed_mappings.sql`：一次性修复已有官方助手映射
+- `sql/005_check_project_managed_mapping_health.sql`：升级前只读自检
 - `scripts/apply-project-admin-core.ps1`：安装核心 schema
+- `scripts/check-project-admin-mappings.ps1`：执行升级前映射健康检查
+- `scripts/upgrade-existing-project-admin.ps1`：执行已部署环境的增量升级
 - `scripts/disable-global-auto-provision.ps1`：关闭旧的全局自动下发
 - `scripts/start-admin-api.ps1`：启动独立后端
 - `scripts/start-admin-web.ps1`：启动独立前端
@@ -60,9 +103,17 @@
 
 建议实施顺序：
 1. 如环境中存在旧的全局自动下发对象，再执行 `002_disable_global_auto_provision.sql`
-2. 执行 `001_project_admin_core.sql`
-3. 启动独立管理端 API
-4. 启动独立管理端 UI
+2. 新环境执行 `001_project_admin_core.sql`
+3. 已部署旧环境按需执行：
+   - 先执行 `scripts/check-project-admin-mappings.ps1`
+   - 再执行 `scripts/upgrade-existing-project-admin.ps1`
+4. 启动独立管理端 API
+5. 启动独立管理端 UI
+
+说明：
+- `001` 是全量初始化脚本，适合新库。
+- `003` 是增量升级脚本，适合已经安装过旧版 `lobehub_admin` schema 的数据库。
+- `004` 是一次性修复脚本，只修复 `project_managed_agents` 中已经存在的官方助手/会话映射；如果某个项目成员完全没有映射记录，仍应重新执行一次“赋予助手”或“刷新助手”。
 
 当前实际线上整合方案：
 

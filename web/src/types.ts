@@ -41,6 +41,7 @@ export type ProjectMember = {
   projectManagedAssistantTitle: string | null;
   projectManagedStatus: 'provisioned' | 'failed' | 'skipped' | null;
   projectManagedMessage: string | null;
+  projectManagedUpdatedAt?: string | null;
 };
 
 export type ProjectMemberAssistant = {
@@ -50,6 +51,47 @@ export type ProjectMemberAssistant = {
   updatedAt: string;
   isProjectManaged: boolean;
   managedStatus: 'provisioned' | 'failed' | 'skipped' | null;
+  description?: string | null;
+  model?: string | null;
+  provider?: string | null;
+  systemRole?: string | null;
+  openingMessage?: string | null;
+  openingQuestions?: string[];
+  chatConfig?: unknown | null;
+  params?: unknown | null;
+  pluginIdentifiers?: string[];
+  unresolvedPluginIdentifiers?: string[];
+  skills?: ProjectMemberAssistantSkill[];
+};
+
+export type ProjectMemberAssistantSkill = {
+  id: string;
+  name: string;
+  description: string | null;
+  identifier: string | null;
+  source: string | null;
+  updatedAt: string;
+};
+
+export type ProjectMemberAssistantDetail = {
+  id: string;
+  userId: string;
+  title: string | null;
+  slug: string | null;
+  description: string | null;
+  updatedAt: string;
+  model: string | null;
+  provider: string | null;
+  systemRole: string | null;
+  openingMessage: string | null;
+  openingQuestions: string[];
+  chatConfig: unknown | null;
+  params: unknown | null;
+  pluginIdentifiers: string[];
+  unresolvedPluginIdentifiers: string[];
+  isProjectManaged: boolean;
+  managedStatus: 'provisioned' | 'failed' | 'skipped' | null;
+  skills: ProjectMemberAssistantSkill[];
 };
 
 export type ProjectTemplate = {

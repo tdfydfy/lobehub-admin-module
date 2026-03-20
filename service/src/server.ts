@@ -1,8 +1,10 @@
 import { env } from './config.js';
 import { db } from './db.js';
+import { resumePendingProvisionJobs } from './provision-jobs.js';
 import { buildApp } from './app.js';
 
 const app = await buildApp();
+await resumePendingProvisionJobs(app.log);
 
 const shutdown = async () => {
   await app.close();

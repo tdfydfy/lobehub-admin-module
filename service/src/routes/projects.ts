@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
+import { enqueueProvisionJob, scheduleProvisionJob } from '../provision-jobs.js';
 
 type ManagedAssistantStatus = 'provisioned' | 'failed' | 'skipped' | null;
+const EXCLUDED_AGENT_SLUGS = ['inbox', 'page-agent', 'agent-builder', 'group-agent-builder'];
 
 type ProjectSummaryRow = {
   id: string;
@@ -23,6 +25,56 @@ type MemberAssistantSummary = {
   updatedAt: string;
   isProjectManaged: boolean;
   managedStatus: ManagedAssistantStatus;
+  description?: string | null;
+  model?: string | null;
+  provider?: string | null;
+  systemRole?: string | null;
+  openingMessage?: string | null;
+  openingQuestions?: string[];
+  chatConfig?: unknown | null;
+  params?: unknown | null;
+  pluginIdentifiers?: string[];
+  unresolvedPluginIdentifiers?: string[];
+  skills?: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    identifier: string | null;
+    source: string | null;
+    updatedAt: string;
+  }>;
+};
+
+type MemberAssistantDetailRow = {
+  id: string;
+  user_id: string;
+  title: string | null;
+  slug: string | null;
+  description: string | null;
+  updated_at: string;
+  model: string | null;
+  provider: string | null;
+  system_role: string | null;
+  opening_message: string | null;
+  opening_questions: string[] | null;
+  chat_config: unknown | null;
+  params: unknown | null;
+  plugins: unknown;
+  is_project_managed: boolean;
+  managed_status: ManagedAssistantStatus;
+};
+
+type MemberAssistantSkillRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  identifier: string | null;
+  source: string | null;
+  updated_at: string;
+};
+
+type MemberAssistantSkillLookupRow = MemberAssistantSkillRow & {
+  user_id: string;
 };
 
 const createProjectSchema = z.object({
@@ -66,6 +118,131 @@ function templateMutationError(message: string) {
   const error = new Error(message);
   (error as Error & { statusCode?: number }).statusCode = 409;
   return error;
+}
+
+function parsePluginIdentifiers(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  const identifiers = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return [...new Set(identifiers)];
+}
+
+async function fetchProjectAssistantDetail(projectId: string, userId: string, assistantId: string) {
+  const assistantResult = await query<MemberAssistantDetailRow>(
+    `
+    select
+      a.id,
+      a.user_id,
+      a.title,
+      a.slug,
+      a.description,
+      a.updated_at,
+      a.model,
+      a.provider,
+      a.system_role,
+      a.opening_message,
+      a.opening_questions,
+      a.chat_config,
+      a.params,
+      a.plugins,
+      (pma.managed_agent_id is not null) as is_project_managed,
+      pma.last_status as managed_status
+    from lobehub_admin.project_members pm
+    join public.agents a
+      on a.user_id = pm.user_id
+    left join lobehub_admin.project_managed_agents pma
+      on pma.project_id = pm.project_id
+     and pma.user_id = pm.user_id
+     and pma.managed_agent_id = a.id
+    where pm.project_id = $1
+      and pm.user_id = $2
+      and a.id = $3
+      and coalesce(a.slug, '') <> all($4::text[])
+    limit 1
+    `,
+    [projectId, userId, assistantId, EXCLUDED_AGENT_SLUGS],
+  );
+
+  const assistant = assistantResult.rows[0];
+
+  if (!assistant) {
+    const error = new Error(`Assistant not found for member: ${assistantId}`);
+    (error as Error & { statusCode?: number }).statusCode = 404;
+    throw error;
+  }
+
+  const pluginIdentifiers = parsePluginIdentifiers(assistant.plugins);
+  const skillsResult = pluginIdentifiers.length > 0
+    ? await query<MemberAssistantSkillRow>(
+      `
+      select
+        s.id,
+        s.name,
+        s.description,
+        s.identifier,
+        s.source,
+        s.updated_at
+      from public.agent_skills s
+      where s.user_id = $1
+        and s.identifier = any($2::text[])
+      order by s.updated_at desc, s.name asc
+      `,
+      [assistant.user_id, pluginIdentifiers],
+    )
+    : { rows: [] as MemberAssistantSkillRow[] };
+
+  const skillOrder = new Map(pluginIdentifiers.map((identifier, index) => [identifier, index]));
+  const matchedIdentifiers = new Set<string>();
+  const skills = skillsResult.rows
+    .map((row) => {
+      if (row.identifier) {
+        matchedIdentifiers.add(row.identifier);
+      }
+
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        identifier: row.identifier,
+        source: row.source,
+        updatedAt: row.updated_at,
+      };
+    })
+    .sort((left, right) => {
+      const leftOrder = skillOrder.get(left.identifier ?? '') ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = skillOrder.get(right.identifier ?? '') ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+      return left.name.localeCompare(right.name, 'zh-CN');
+    });
+
+  return {
+    assistant: {
+      id: assistant.id,
+      userId: assistant.user_id,
+      title: assistant.title,
+      slug: assistant.slug,
+      description: assistant.description,
+      updatedAt: assistant.updated_at,
+      model: assistant.model,
+      provider: assistant.provider,
+      systemRole: assistant.system_role,
+      openingMessage: assistant.opening_message,
+      openingQuestions: Array.isArray(assistant.opening_questions) ? assistant.opening_questions : [],
+      chatConfig: assistant.chat_config,
+      params: assistant.params,
+      pluginIdentifiers,
+      unresolvedPluginIdentifiers: pluginIdentifiers.filter((identifier) => !matchedIdentifiers.has(identifier)),
+      isProjectManaged: assistant.is_project_managed,
+      managedStatus: assistant.managed_status,
+      skills,
+    },
+  };
 }
 
 function mapProjectRow(row: ProjectSummaryRow) {
@@ -412,6 +589,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       managed_agent_title: string | null;
       project_managed_status: ManagedAssistantStatus;
       project_managed_message: string | null;
+      project_managed_updated_at: string | null;
     }>(
       `
       select
@@ -424,7 +602,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         pma.managed_agent_id,
         ma.title as managed_agent_title,
         pma.last_status as project_managed_status,
-        pma.last_message as project_managed_message
+        pma.last_message as project_managed_message,
+        pma.provisioned_at as project_managed_updated_at
       from lobehub_admin.project_members_view pmv
       left join lobehub_admin.project_managed_agents pma
         on pma.project_id = pmv.project_id
@@ -449,6 +628,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         updated_at: string;
         is_project_managed: boolean;
         managed_status: ManagedAssistantStatus;
+        description: string | null;
+        model: string | null;
+        provider: string | null;
+        system_role: string | null;
+        opening_message: string | null;
+        opening_questions: string[] | null;
+        chat_config: unknown | null;
+        params: unknown | null;
+        plugins: unknown;
       }>(
         `
         select
@@ -457,6 +645,15 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           a.title,
           a.slug,
           a.updated_at,
+          a.description,
+          a.model,
+          a.provider,
+          a.system_role,
+          a.opening_message,
+          a.opening_questions,
+          a.chat_config,
+          a.params,
+          a.plugins,
           (pma.managed_agent_id is not null) as is_project_managed,
           pma.last_status as managed_status
         from public.agents a
@@ -465,16 +662,75 @@ export async function registerProjectRoutes(app: FastifyInstance) {
          and pma.user_id = a.user_id
          and pma.managed_agent_id = a.id
         where a.user_id = any($2::text[])
-          and coalesce(a.slug, '') not in ('inbox', 'page-agent', 'agent-builder', 'group-agent-builder')
+          and coalesce(a.slug, '') <> all($3::text[])
         order by
           a.user_id asc,
           case when pma.managed_agent_id is not null then 0 else 1 end,
           a.updated_at desc
         `,
-        [params.projectId, userIds],
+        [params.projectId, userIds, EXCLUDED_AGENT_SLUGS],
       );
 
+      const pluginIdentifiersByAssistant = new Map<string, string[]>();
+      const requestedSkillIdentifiersByUser = new Map<string, Set<string>>();
+
       for (const row of assistantResult.rows) {
+        const pluginIdentifiers = parsePluginIdentifiers(row.plugins);
+        pluginIdentifiersByAssistant.set(`${row.user_id}:${row.agent_id}`, pluginIdentifiers);
+
+        if (pluginIdentifiers.length === 0) continue;
+
+        const current = requestedSkillIdentifiersByUser.get(row.user_id) ?? new Set<string>();
+
+        for (const identifier of pluginIdentifiers) {
+          current.add(identifier);
+        }
+
+        requestedSkillIdentifiersByUser.set(row.user_id, current);
+      }
+
+      const requestedUserIds = [...requestedSkillIdentifiersByUser.keys()];
+      const requestedSkillIdentifiers = [...new Set(
+        [...requestedSkillIdentifiersByUser.values()].flatMap((identifiers) => [...identifiers]),
+      )];
+      const skillLookup = new Map<string, MemberAssistantSkillLookupRow>();
+      const skillResult = requestedUserIds.length > 0 && requestedSkillIdentifiers.length > 0
+        ? await query<MemberAssistantSkillLookupRow>(
+          `
+          select
+            s.user_id,
+            s.id,
+            s.name,
+            s.description,
+            s.identifier,
+            s.source,
+            s.updated_at
+          from public.agent_skills s
+          where s.user_id = any($1::text[])
+            and s.identifier = any($2::text[])
+          `,
+          [requestedUserIds, requestedSkillIdentifiers],
+        )
+        : { rows: [] as MemberAssistantSkillLookupRow[] };
+
+      for (const row of skillResult.rows) {
+        if (!row.identifier) continue;
+        skillLookup.set(`${row.user_id}:${row.identifier}`, row);
+      }
+
+      for (const row of assistantResult.rows) {
+        const pluginIdentifiers = pluginIdentifiersByAssistant.get(`${row.user_id}:${row.agent_id}`) ?? [];
+        const skills = pluginIdentifiers
+          .map((identifier) => skillLookup.get(`${row.user_id}:${identifier}`))
+          .filter((skill): skill is MemberAssistantSkillLookupRow => Boolean(skill))
+          .map((skill) => ({
+            id: skill.id,
+            name: skill.name,
+            description: skill.description,
+            identifier: skill.identifier,
+            source: skill.source,
+            updatedAt: skill.updated_at,
+          }));
         const current = assistantsByUser.get(row.user_id) ?? [];
         current.push({
           id: row.agent_id,
@@ -483,6 +739,19 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           updatedAt: row.updated_at,
           isProjectManaged: row.is_project_managed,
           managedStatus: row.managed_status,
+          description: row.description,
+          model: row.model,
+          provider: row.provider,
+          systemRole: row.system_role,
+          openingMessage: row.opening_message,
+          openingQuestions: Array.isArray(row.opening_questions) ? row.opening_questions : [],
+          chatConfig: row.chat_config,
+          params: row.params,
+          pluginIdentifiers,
+          unresolvedPluginIdentifiers: pluginIdentifiers.filter(
+            (identifier) => !skillLookup.has(`${row.user_id}:${identifier}`),
+          ),
+          skills,
         });
         assistantsByUser.set(row.user_id, current);
       }
@@ -506,6 +775,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         projectManagedAssistantTitle: row.managed_agent_title,
         projectManagedStatus: row.project_managed_status,
         projectManagedMessage: row.project_managed_message,
+        projectManagedUpdatedAt: row.project_managed_updated_at,
       };
 
       if (row.role === 'admin') {
@@ -516,6 +786,20 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     }
 
     return { admins, members };
+  });
+
+  app.get('/api/assistant-detail', async (request) => {
+    const actor = await requireActor(request);
+    const queryParams = z
+      .object({
+        projectId: z.string().min(1),
+        userId: z.string().min(1),
+        assistantId: z.string().min(1),
+      })
+      .parse(request.query);
+
+    await ensureProjectAdmin(actor.id, queryParams.projectId);
+    return fetchProjectAssistantDetail(queryParams.projectId, queryParams.userId, queryParams.assistantId);
   });
 
   app.post('/api/projects/:projectId/members', async (request, reply) => {
@@ -735,11 +1019,29 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     const queryParams = z
       .object({
-        adminUserId: z.string().min(1),
+        adminUserId: z.string().min(1).optional(),
+        userId: z.string().min(1).optional(),
+        agentId: z.string().min(1).optional(),
       })
       .parse(request.query);
 
     await ensureProjectAdmin(actor.id, params.projectId);
+
+    if (queryParams.userId || queryParams.agentId) {
+      if (!queryParams.userId || !queryParams.agentId) {
+        const error = new Error('userId and agentId are required when querying assistant detail');
+        (error as Error & { statusCode?: number }).statusCode = 400;
+        throw error;
+      }
+
+      return fetchProjectAssistantDetail(params.projectId, queryParams.userId, queryParams.agentId);
+    }
+
+    if (!queryParams.adminUserId) {
+      return {
+        agents: [],
+      };
+    }
 
     const adminCheck = await query<{ exists: boolean }>(
       `
@@ -841,13 +1143,21 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     await ensureProjectAdmin(actor.id, params.projectId);
 
-    const result = await query<{ job_id: string }>(
-      'select lobehub_admin.run_project_provision_job($1, $2, $3, $4, $5) as job_id',
-      [params.projectId, 'configure', actor.id, false, body.setDefaultAgent],
+    const jobId = await enqueueProvisionJob(
+      params.projectId,
+      'configure',
+      actor.id,
+      body.setDefaultAgent,
     );
 
+    if (!jobId) {
+      throw new Error('Failed to create provision job');
+    }
+
+    scheduleProvisionJob(jobId, app.log);
+
     return reply.code(202).send({
-      jobId: result.rows[0]?.job_id,
+      jobId,
     });
   });
 
@@ -858,13 +1168,21 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     await ensureProjectAdmin(actor.id, params.projectId);
 
-    const result = await query<{ job_id: string }>(
-      'select lobehub_admin.run_project_provision_job($1, $2, $3, $4, $5) as job_id',
-      [params.projectId, 'refresh', actor.id, true, body.setDefaultAgent],
+    const jobId = await enqueueProvisionJob(
+      params.projectId,
+      'refresh',
+      actor.id,
+      body.setDefaultAgent,
     );
 
+    if (!jobId) {
+      throw new Error('Failed to create provision job');
+    }
+
+    scheduleProvisionJob(jobId, app.log);
+
     return reply.code(202).send({
-      jobId: result.rows[0]?.job_id,
+      jobId,
     });
   });
 

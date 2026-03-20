@@ -3,20 +3,20 @@ param(
   [string]$ComposeFile = "docker-compose.yml",
 
   [Parameter(Mandatory = $false)]
-  [string]$SqlFile = "lobehub-admin-module/sql/002_disable_global_auto_provision.sql"
+  [string]$SqlFile = "sql/002_disable_global_auto_provision.sql"
 )
 
-$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "_admin-common.ps1")
 
-if (-not (Test-Path $SqlFile)) {
-  throw "SQL file not found: $SqlFile"
-}
+$resolvedComposeFile = Resolve-AdminComposeFile -ComposeFile $ComposeFile -ScriptRoot $PSScriptRoot
+$resolvedSqlFile = Resolve-AdminSqlPath -SqlPath $SqlFile -ScriptRoot $PSScriptRoot
 
-Write-Host "==> Disabling legacy global auto provisioning ..."
-Get-Content -Path $SqlFile -Raw |
-  docker compose -f $ComposeFile exec -T postgres psql -U lobehub -d lobehub | Out-Host
+Invoke-ComposeSqlFile `
+  -ComposeFile $resolvedComposeFile `
+  -SqlFile $resolvedSqlFile `
+  -Message "Disabling legacy global auto provisioning ..."
 
 Write-Host "==> Current global provisioning config:"
-docker compose -f $ComposeFile exec -T postgres psql -U lobehub -d lobehub -c "select * from public.get_system_provisioning_template();" | Out-Host
+docker compose -f $resolvedComposeFile exec -T postgres psql -U lobehub -d lobehub -c "select * from public.get_system_provisioning_template();" | Out-Host
 
 Write-Host "Done."

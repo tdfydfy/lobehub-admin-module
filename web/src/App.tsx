@@ -1,5 +1,5 @@
 ﻿import { DatabaseTablePanel } from './components/DatabaseTablePanel';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { formatTimeToShanghai } from './lib/time';
 import { ProjectReportPanel } from './components/ProjectReportPanel';
 import { ProjectTopicStatsPanel } from './components/ProjectTopicStatsPanel';
@@ -11,6 +11,7 @@ import type {
   JobItem,
   ProjectMember,
   ProjectMemberAssistant,
+  ProjectMemberAssistantDetail,
   ProjectSummary,
   ProjectTemplate,
   UserOption,
@@ -51,30 +52,20 @@ function getAccessFeedback(context: ActorContext, projects: NormalizedProject[])
   return `当前用户没有可访问项目：${context.actor.displayName}`;
 }
 
-function getAssistantLabel(assistant: ProjectMemberAssistant) {
-  return assistant.title?.trim() || assistant.slug?.trim() || assistant.id;
-}
-
 function getMemberStatusText(member: ProjectMember) {
-  if (member.role === 'admin') {
-    return '项目管理员，仅展示当前助手';
-  }
-
   if (member.projectManagedStatus === 'provisioned') {
-    return `项目助手：${member.projectManagedAssistantTitle ?? '已配置'}`;
+    return '已配置';
   }
 
   if (member.projectManagedStatus === 'failed') {
-    return member.projectManagedMessage
-      ? `项目助手配置失败：${member.projectManagedMessage}`
-      : '项目助手配置失败';
+    return '分配失败';
   }
 
   if (member.projectManagedStatus === 'skipped') {
-    return '项目助手最近一次任务被跳过';
+    return '已跳过';
   }
 
-  return '未配置项目助手';
+  return '未分配';
 }
 
 function getStatusClass(member: ProjectMember) {
@@ -85,6 +76,221 @@ function getStatusClass(member: ProjectMember) {
 
 function getRoleLabel(role: ProjectMember['role']) {
   return role === 'admin' ? '管理员' : '成员';
+}
+
+function getAssistantDisplayName(assistant: ProjectMemberAssistant) {
+  return assistant.title?.trim() || assistant.slug?.trim() || assistant.id;
+}
+
+function getAssistantDetailKey(userId: string, assistantId: string) {
+  return `${userId}:${assistantId}`;
+}
+
+function formatJsonBlock(value: unknown) {
+  return value == null ? '' : JSON.stringify(value, null, 2);
+}
+
+function createAssistantDetailFromSummary(
+  userId: string,
+  assistant: ProjectMemberAssistant,
+): ProjectMemberAssistantDetail | null {
+  if (
+    assistant.systemRole === undefined
+    && assistant.skills === undefined
+    && assistant.pluginIdentifiers === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    id: assistant.id,
+    userId,
+    title: assistant.title,
+    slug: assistant.slug,
+    description: assistant.description ?? null,
+    updatedAt: assistant.updatedAt,
+    model: assistant.model ?? null,
+    provider: assistant.provider ?? null,
+    systemRole: assistant.systemRole ?? null,
+    openingMessage: assistant.openingMessage ?? null,
+    openingQuestions: assistant.openingQuestions ?? [],
+    chatConfig: assistant.chatConfig ?? null,
+    params: assistant.params ?? null,
+    pluginIdentifiers: assistant.pluginIdentifiers ?? [],
+    unresolvedPluginIdentifiers: assistant.unresolvedPluginIdentifiers ?? [],
+    isProjectManaged: assistant.isProjectManaged,
+    managedStatus: assistant.managedStatus,
+    skills: assistant.skills ?? [],
+  };
+}
+
+type AssistantDetailPanelProps = {
+  assistantName: string;
+  detail: ProjectMemberAssistantDetail | null;
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
+};
+
+function AssistantDetailPanel({
+  assistantName,
+  detail,
+  loading,
+  error,
+  onRetry,
+}: AssistantDetailPanelProps) {
+  if (loading) {
+    return (
+      <div className="assistant-detail-panel">
+        <p className="muted">正在加载「{assistantName}」的助手设定...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="assistant-detail-panel">
+        <p className="danger-text">{error}</p>
+        <button className="secondary" type="button" onClick={onRetry}>
+          重新加载
+        </button>
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="assistant-detail-panel">
+        <p className="muted">暂无助手详情。</p>
+      </div>
+    );
+  }
+
+  const chatConfigText = formatJsonBlock(detail.chatConfig);
+  const paramsText = formatJsonBlock(detail.params);
+
+  return (
+    <div className="assistant-detail-panel">
+      <div className="assistant-detail-head">
+        <div>
+          <p className="eyebrow">Assistant Detail</p>
+          <h4>{detail.title ?? detail.slug ?? detail.id}</h4>
+        </div>
+        <div className="assistant-detail-meta">
+          <span className={`assistant-chip${detail.isProjectManaged ? ' managed' : ''}`}>
+            {detail.isProjectManaged ? '项目助手' : '个人助手'}
+          </span>
+          {detail.managedStatus ? <span className="report-pill">状态 {detail.managedStatus}</span> : null}
+          {detail.model ? <span className="report-pill">模型 {detail.model}</span> : null}
+          {detail.provider ? <span className="report-pill">Provider {detail.provider}</span> : null}
+        </div>
+      </div>
+
+      <div className="assistant-detail-grid">
+        <section className="assistant-detail-section">
+          <h5>基础信息</h5>
+          <div className="assistant-detail-kv">
+            <span>标题</span>
+            <strong>{detail.title ?? '-'}</strong>
+          </div>
+          <div className="assistant-detail-kv">
+            <span>Slug</span>
+            <strong>{detail.slug ?? '-'}</strong>
+          </div>
+          <div className="assistant-detail-kv">
+            <span>助手 ID</span>
+            <strong>{detail.id}</strong>
+          </div>
+          <div className="assistant-detail-kv">
+            <span>更新时间</span>
+            <strong>{formatTime(detail.updatedAt)}</strong>
+          </div>
+          {detail.description ? (
+            <div className="assistant-detail-note">
+              <span>描述</span>
+              <p>{detail.description}</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="assistant-detail-section">
+          <h5>技能</h5>
+          {detail.skills.length > 0 ? (
+            <div className="assistant-skill-list">
+              {detail.skills.map((skill) => (
+                <article key={skill.id} className="assistant-skill-card">
+                  <strong>{skill.name}</strong>
+                  <span className="member-subtext">{skill.identifier ?? skill.id}</span>
+                  <span className="member-subtext">更新：{formatTime(skill.updatedAt)}</span>
+                  {skill.description ? <p>{skill.description}</p> : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">当前助手未匹配到可展示的技能。</p>
+          )}
+          {detail.unresolvedPluginIdentifiers.length > 0 ? (
+            <div className="assistant-detail-note">
+              <span>未匹配插件标识</span>
+              <p>{detail.unresolvedPluginIdentifiers.join(' / ')}</p>
+            </div>
+          ) : null}
+        </section>
+      </div>
+
+      <section className="assistant-detail-section">
+        <h5>提示词</h5>
+        <pre className="raw-modal-content assistant-detail-content">{detail.systemRole ?? '未配置提示词'}</pre>
+      </section>
+
+      {detail.openingMessage ? (
+        <section className="assistant-detail-section">
+          <h5>开场白</h5>
+          <pre className="raw-modal-content assistant-detail-content">{detail.openingMessage}</pre>
+        </section>
+      ) : null}
+
+      {detail.openingQuestions.length > 0 ? (
+        <section className="assistant-detail-section">
+          <h5>开场问题</h5>
+          <div className="assistant-detail-questions">
+            {detail.openingQuestions.map((question) => (
+              <span key={question} className="report-pill">
+                {question}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {detail.pluginIdentifiers.length > 0 ? (
+        <section className="assistant-detail-section">
+          <h5>插件标识</h5>
+          <div className="assistant-detail-questions">
+            {detail.pluginIdentifiers.map((identifier) => (
+              <span key={identifier} className="report-pill">
+                {identifier}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {chatConfigText ? (
+        <details className="assistant-detail-json">
+          <summary>查看对话配置</summary>
+          <pre className="raw-modal-content assistant-detail-content">{chatConfigText}</pre>
+        </details>
+      ) : null}
+
+      {paramsText ? (
+        <details className="assistant-detail-json">
+          <summary>查看模型参数</summary>
+          <pre className="raw-modal-content assistant-detail-content">{paramsText}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
 }
 
 type WorkbenchProps = {
@@ -116,6 +322,7 @@ type WorkbenchProps = {
   setSetDefaultAgent: (value: boolean) => void;
   templateDirty: boolean;
   hasSavedTemplate: boolean;
+  provisionBusy: boolean;
   handleSaveTemplate: () => Promise<void>;
   handleRunProvision: (jobType: 'configure' | 'refresh') => Promise<void>;
   job: JobDetail | null;
@@ -153,6 +360,7 @@ function ProjectWorkbench({
   setSetDefaultAgent,
   templateDirty,
   hasSavedTemplate,
+  provisionBusy,
   handleSaveTemplate,
   handleRunProvision,
   job,
@@ -162,6 +370,57 @@ function ProjectWorkbench({
 }: WorkbenchProps) {
   const rows = [...admins, ...members];
   const hasCurrentAgentSelection = agents.some((agent) => agent.id === selectedAgentId);
+  const [expandedAssistantKey, setExpandedAssistantKey] = useState('');
+  const [assistantDetailCache, setAssistantDetailCache] = useState<Record<string, ProjectMemberAssistantDetail>>({});
+  const [assistantDetailLoadingKey, setAssistantDetailLoadingKey] = useState('');
+  const [assistantDetailErrors, setAssistantDetailErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setExpandedAssistantKey('');
+    setAssistantDetailCache({});
+    setAssistantDetailLoadingKey('');
+    setAssistantDetailErrors({});
+  }, [projectDetail.id]);
+
+  async function loadAssistantDetail(
+    member: ProjectMember,
+    assistant: ProjectMemberAssistant,
+    forceRefresh = false,
+  ) {
+    const detailKey = getAssistantDetailKey(member.userId, assistant.id);
+    const embeddedDetail = createAssistantDetailFromSummary(member.userId, assistant);
+
+    if (!forceRefresh && (assistantDetailCache[detailKey] || assistantDetailLoadingKey === detailKey)) {
+      return;
+    }
+
+    if (!forceRefresh && embeddedDetail) {
+      setAssistantDetailCache((current) => ({
+        ...current,
+        [detailKey]: embeddedDetail,
+      }));
+      return;
+    }
+
+    const message = `未找到助手详情：${getAssistantDisplayName(assistant)}`;
+    setAssistantDetailErrors((current) => ({
+      ...current,
+      [detailKey]: message,
+    }));
+    setFeedback(message);
+  }
+
+  function toggleAssistantDetail(member: ProjectMember, assistant: ProjectMemberAssistant) {
+    const detailKey = getAssistantDetailKey(member.userId, assistant.id);
+
+    if (expandedAssistantKey === detailKey) {
+      setExpandedAssistantKey('');
+      return;
+    }
+
+    setExpandedAssistantKey(detailKey);
+    void loadAssistantDetail(member, assistant);
+  }
 
   return (
     <>
@@ -258,78 +517,112 @@ function ProjectWorkbench({
                     <th>成员</th>
                     <th>角色</th>
                     <th>加入时间</th>
-                    <th>项目助手状态</th>
-                    <th>当前助手</th>
+                    <th>助手信息</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((member) => (
-                    <tr key={member.userId}>
-                      <td className="member-name-cell">
-                        <strong>{member.displayName}</strong>
-                        <span className="member-subtext">{member.email ?? member.userId}</span>
-                      </td>
-                      <td>
-                        <span className={`role-pill${member.role === 'admin' ? ' admin' : ''}`}>
-                          {getRoleLabel(member.role)}
-                        </span>
-                      </td>
-                      <td>{formatTime(member.joinedAt)}</td>
-                      <td>
-                        <div className={`member-status${getStatusClass(member) ? ` ${getStatusClass(member)}` : ''}`}>
-                          {getMemberStatusText(member)}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="assistant-summary">
-                          <span className="member-subtext">共 {member.assistantCount} 个</span>
-                          {member.assistants.length > 0 ? (
-                            <div className="assistant-chips">
-                              {member.assistants.map((assistant) => (
-                                <span
-                                  key={assistant.id}
-                                  className={`assistant-chip${assistant.isProjectManaged ? ' managed' : ''}`}
-                                >
-                                  {getAssistantLabel(assistant)}
-                                  {assistant.isProjectManaged ? <small>项目</small> : null}
-                                </span>
-                              ))}
+                  {rows.map((member) => {
+                    const expandedAssistant = member.assistants.find(
+                      (assistant) => getAssistantDetailKey(member.userId, assistant.id) === expandedAssistantKey,
+                    ) ?? null;
+                    const detailKey = expandedAssistant
+                      ? getAssistantDetailKey(member.userId, expandedAssistant.id)
+                      : '';
+                    const assistantDetail = detailKey ? assistantDetailCache[detailKey] ?? null : null;
+                    const assistantDetailError = detailKey ? assistantDetailErrors[detailKey] ?? '' : '';
+                    const assistantDetailLoading = detailKey !== '' && assistantDetailLoadingKey === detailKey;
+
+                    return (
+                      <Fragment key={member.userId}>
+                        <tr>
+                          <td className="member-name-cell">
+                            <strong>{member.displayName}</strong>
+                            <span className="member-subtext">{member.email ?? member.userId}</span>
+                          </td>
+                          <td>
+                            <span className={`role-pill${member.role === 'admin' ? ' admin' : ''}`}>
+                              {getRoleLabel(member.role)}
+                            </span>
+                          </td>
+                          <td>{formatTime(member.joinedAt)}</td>
+                          <td>
+                            <div className="assistant-summary">
+                              <div className={`member-status${getStatusClass(member) ? ` ${getStatusClass(member)}` : ''}`}>
+                                {getMemberStatusText(member)}
+                              </div>
+                              {member.assistants.length > 0 ? (
+                                <div className="assistant-chips assistant-detail-chips">
+                                  {member.assistants.map((assistant) => {
+                                    const assistantKey = getAssistantDetailKey(member.userId, assistant.id);
+                                    const isExpanded = expandedAssistantKey === assistantKey;
+
+                                    return (
+                                      <button
+                                        key={assistant.id}
+                                        type="button"
+                                        className={`assistant-chip assistant-detail-trigger${assistant.isProjectManaged ? ' managed' : ''}${isExpanded ? ' active' : ''}`}
+                                        onClick={() => toggleAssistantDetail(member, assistant)}
+                                      >
+                                        <span>{getAssistantDisplayName(assistant)}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                              {member.projectManagedUpdatedAt ? (
+                                <span className="member-subtext">最近更新：{formatTime(member.projectManagedUpdatedAt)}</span>
+                              ) : null}
+                              {member.projectManagedStatus === 'failed' && member.projectManagedMessage ? (
+                                <span className="member-subtext">{member.projectManagedMessage}</span>
+                              ) : null}
                             </div>
-                          ) : (
-                            <span className="member-empty">暂无助手</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="member-table-actions">
-                        <div className="button-row member-action-row">
-                          {member.role === 'member' ? (
-                            <>
-                              <button className="secondary" onClick={() => void handleUpdateMemberRole(member.userId, 'admin')}>
-                                设为管理员
-                              </button>
-                              <button className="ghost" onClick={() => void handleRemoveMember(member.userId)}>
-                                移除
-                              </button>
-                            </>
-                          ) : template?.template_user_id === member.userId ? (
-                            <span className="muted">当前模板管理员</span>
-                          ) : admins.length > 1 ? (
-                            <>
-                              <button className="secondary" onClick={() => void handleUpdateMemberRole(member.userId, 'member')}>
-                                降为成员
-                              </button>
-                              <button className="ghost" onClick={() => void handleRemoveMember(member.userId)}>
-                                移除
-                              </button>
-                            </>
-                          ) : (
-                            <span className="muted">需保留至少一名管理员</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          <td className="member-table-actions">
+                            <div className="button-row member-action-row">
+                              {member.role === 'member' ? (
+                                <>
+                                  <button className="secondary" onClick={() => void handleUpdateMemberRole(member.userId, 'admin')}>
+                                    设为管理员
+                                  </button>
+                                  <button className="ghost" onClick={() => void handleRemoveMember(member.userId)}>
+                                    移除
+                                  </button>
+                                </>
+                              ) : template?.template_user_id === member.userId ? (
+                                <span className="muted">当前模板管理员</span>
+                              ) : admins.length > 1 ? (
+                                <>
+                                  <button className="secondary" onClick={() => void handleUpdateMemberRole(member.userId, 'member')}>
+                                    降为成员
+                                  </button>
+                                  <button className="ghost" onClick={() => void handleRemoveMember(member.userId)}>
+                                    移除
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="muted">需保留至少一名管理员</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {expandedAssistant ? (
+                          <tr className="member-detail-row">
+                            <td colSpan={5}>
+                              <AssistantDetailPanel
+                                assistantName={getAssistantDisplayName(expandedAssistant)}
+                                detail={assistantDetail}
+                                loading={assistantDetailLoading}
+                                error={assistantDetailError}
+                                onRetry={() => void loadAssistantDetail(member, expandedAssistant, true)}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -425,14 +718,14 @@ function ProjectWorkbench({
             <div className="button-row">
               <button
                 className="primary"
-                disabled={!hasSavedTemplate || templateDirty}
+                disabled={!hasSavedTemplate || templateDirty || provisionBusy}
                 onClick={() => void handleRunProvision('configure')}
               >
                 为成员配置助手
               </button>
               <button
                 className="secondary"
-                disabled={!hasSavedTemplate || templateDirty}
+                disabled={!hasSavedTemplate || templateDirty || provisionBusy}
                 onClick={() => void handleRunProvision('refresh')}
               >
                 刷新成员助手
@@ -549,7 +842,7 @@ function SystemHeader({
 type SystemProjectListPageProps = {
   projects: ProjectSummary[];
   selectedProjectId: string;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<{ ok: boolean; selectedProjectId: string }>;
   onOpenProject: (projectId: string) => void;
   onShowCreatePage: () => void;
 };
@@ -801,6 +1094,7 @@ export default function App() {
   const [latestJobId, setLatestJobId] = useState('');
   const [job, setJob] = useState<JobDetail | null>(null);
   const [jobItems, setJobItems] = useState<JobItem[]>([]);
+  const [provisionSubmitting, setProvisionSubmitting] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [userKeyword, setUserKeyword] = useState('');
@@ -811,14 +1105,6 @@ export default function App() {
   const [feedback, setFeedback] = useState('准备就绪');
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [legacyStatus, setLegacyStatus] = useState<{
-    triggerInstalled: boolean;
-    triggerEnabled: boolean;
-    configEnabled: boolean | null;
-    templateUserId: string | null;
-    templateAgentId: string | null;
-    updatedAt: string | null;
-  } | null>(null);
   const selectedProjectRole = projects.find((project) => project.id === selectedProjectId)?.actorRole ?? null;
 
   useEffect(() => {
@@ -840,13 +1126,6 @@ export default function App() {
     if (!actorId || !actorInput.trim()) return;
     window.localStorage.setItem('lobehub-admin-last-email', actorInput.trim());
   }, [actorId, actorInput]);
-
-  useEffect(() => {
-    void api
-      .getSystemStatus()
-      .then((result) => setLegacyStatus(result.legacyAutoProvision))
-      .catch((error: Error) => setFeedback(error.message));
-  }, []);
 
   useEffect(() => {
     if (!actorId) {
@@ -1051,26 +1330,38 @@ export default function App() {
     setProjectDetail(null);
     setAdmins([]);
     setMembers([]);
+    setMemberEmails('');
+    setMemberRole('member');
     setTemplate(null);
     setTemplateAdminId('');
     setSelectedAgentId('');
+    setCopySkills(true);
+    setSetDefaultAgent(false);
     setAgents([]);
     setLoadingAgentOptions(false);
     setLatestJobId('');
     setJob(null);
     setJobItems([]);
+    setProvisionSubmitting(false);
+  }
+
+  function beginProjectSwitch(projectId: string) {
+    setLoadingDetail(Boolean(projectId));
+    resetProjectWorkspace();
+    setSelectedProjectId(projectId);
   }
 
   function openSystemProject(projectId: string) {
     setSelectedTab('members');
-    resetProjectWorkspace();
-    setSelectedProjectId(projectId);
+    beginProjectSwitch(projectId);
     setProjectReloadKey((current) => current + 1);
     setSystemPage('project-detail');
   }
 
   async function refreshAccessBundle() {
-    if (!actorId) return;
+    if (!actorId) {
+      return { ok: false, selectedProjectId: '' };
+    }
 
     setLoadingAccess(true);
     try {
@@ -1080,34 +1371,33 @@ export default function App() {
       ]);
 
       const normalizedProjects = projectsResult.projects.map(normalizeProject);
+      const nextSelectedProjectId = selectedProjectId && normalizedProjects.some((project) => project.id === selectedProjectId)
+        ? selectedProjectId
+        : contextResult.isSystemAdmin
+          ? ''
+          : getPreferredProjectId(normalizedProjects);
+
       setActorContext(contextResult);
       setProjects(normalizedProjects);
-      setSelectedProjectId((current) => {
-        if (current && normalizedProjects.some((project) => project.id === current)) {
-          return current;
-        }
-
-        return contextResult.isSystemAdmin ? '' : getPreferredProjectId(normalizedProjects);
-      });
+      setSelectedProjectId(nextSelectedProjectId);
       setFeedback(getAccessFeedback(contextResult, normalizedProjects));
+      return { ok: true, selectedProjectId: nextSelectedProjectId };
     } catch (error) {
       setFeedback((error as Error).message);
+      return { ok: false, selectedProjectId: '' };
     } finally {
       setLoadingAccess(false);
     }
   }
 
-  async function refreshProjectMembershipState(projectId: string) {
-    if (!actorId) return;
+  async function refreshAfterMembershipMutation(projectId: string) {
+    setLoadingDetail(Boolean(projectId));
+    resetProjectWorkspace();
+    const result = await refreshAccessBundle();
 
-    const [projectResult, membersResult] = await Promise.all([
-      api.getProject(actorId, projectId),
-      api.getMembers(actorId, projectId),
-    ]);
-
-    setProjectDetail(projectResult.project ? normalizeProject(projectResult.project) : null);
-    setAdmins(membersResult.admins);
-    setMembers(membersResult.members);
+    if (!result.ok || !result.selectedProjectId) {
+      setLoadingDetail(false);
+    }
   }
 
   async function handleSearchUsers() {
@@ -1151,7 +1441,12 @@ export default function App() {
       setUserOptions([]);
       setUserKeyword('');
 
-      await refreshAccessBundle();
+      const refreshResult = await refreshAccessBundle();
+
+      if (!refreshResult.ok) {
+        return;
+      }
+
       openSystemProject(result.projectId);
       setFeedback(`项目已创建：${result.projectId}`);
     } catch (error) {
@@ -1165,10 +1460,17 @@ export default function App() {
 
     try {
       await api.deleteProject(actorId, projectDetail.id);
-      await refreshAccessBundle();
       resetProjectWorkspace();
       setSelectedProjectId('');
       setSystemPage('project-list');
+
+      const refreshResult = await refreshAccessBundle();
+
+      if (!refreshResult.ok) {
+        setLoadingDetail(false);
+        return;
+      }
+
       setFeedback(`项目已删除：${projectDetail.name}`);
     } catch (error) {
       setFeedback((error as Error).message);
@@ -1189,7 +1491,7 @@ export default function App() {
       const result = await api.addMembers(actorId, selectedProjectId, emails, memberRole);
       setMemberEmails('');
       setFeedback(`成员处理完成：${result.results.map((item) => `${item.email}:${item.status}`).join('，')}`);
-      await refreshProjectMembershipState(selectedProjectId);
+      await refreshAfterMembershipMutation(selectedProjectId);
     } catch (error) {
       setFeedback((error as Error).message);
     }
@@ -1207,7 +1509,7 @@ export default function App() {
     try {
       await api.updateMemberRole(actorId, selectedProjectId, userId, role);
       setFeedback(`${targetLabel} 已${actionLabel}`);
-      await refreshProjectMembershipState(selectedProjectId);
+      await refreshAfterMembershipMutation(selectedProjectId);
     } catch (error) {
       setFeedback((error as Error).message);
     }
@@ -1224,7 +1526,7 @@ export default function App() {
     try {
       await api.removeMember(actorId, selectedProjectId, userId);
       setFeedback(`成员已移除：${targetLabel}`);
-      await refreshProjectMembershipState(selectedProjectId);
+      await refreshAfterMembershipMutation(selectedProjectId);
     } catch (error) {
       setFeedback((error as Error).message);
     }
@@ -1268,8 +1570,10 @@ export default function App() {
     if (!actorId || !selectedProjectId) return setFeedback('请先选择项目并载入操作者');
     if (!hasSavedTemplate) return setFeedback('请先保存模板配置，再执行批量助手配置');
     if (templateDirty) return setFeedback('当前模板选择有未保存变更，请先保存');
+    if (provisionBusy) return setFeedback('当前已有批量任务正在执行，请等待完成后再试');
 
     try {
+      setProvisionSubmitting(true);
       const result = jobType === 'configure'
         ? await api.runProvision(actorId, selectedProjectId, setDefaultAgent)
         : await api.runRefresh(actorId, selectedProjectId, setDefaultAgent);
@@ -1277,6 +1581,8 @@ export default function App() {
       setFeedback(`任务已启动：${result.jobId}`);
     } catch (error) {
       setFeedback((error as Error).message);
+    } finally {
+      setProvisionSubmitting(false);
     }
   }
 
@@ -1323,13 +1629,24 @@ export default function App() {
     setFeedback('已退出当前后台');
   }
 
+  const hasSelectedProjectDetail = projectDetail?.id === selectedProjectId;
+  const selectedProjectName = selectedProjectId
+    ? (
+      projects.find((project) => project.id === selectedProjectId)?.name
+      ?? (hasSelectedProjectDetail ? projectDetail.name : 'No project selected')
+    )
+    : 'No project selected';
+  const hasStaleProjectDetail = Boolean(projectDetail && projectDetail.id !== selectedProjectId);
+  const provisionBusy = provisionSubmitting || (Boolean(latestJobId) && (!job || ['pending', 'running'].includes(job.status)));
   const statusTarget = portalMode === 'system'
     ? systemPage === 'project-list'
       ? 'Project list'
       : systemPage === 'project-create'
         ? 'New project'
-        : projectDetail?.name ?? 'No project selected'
-    : projectDetail?.name ?? 'No project selected';
+        : selectedProjectName
+    : selectedProjectName;
+  const isProjectBundleLoading = Boolean(selectedProjectId)
+    && (loadingDetail || hasStaleProjectDetail);
 
   return (
     <div className="app-shell">
@@ -1398,16 +1715,6 @@ export default function App() {
         </div>
       </header>
 
-      {legacyStatus?.triggerEnabled && legacyStatus.configEnabled ? (
-        <div className="legacy-warning">
-          <strong>旧的全局自动下发仍处于启用状态。</strong>
-          <span>
-            新用户注册后仍会自动复制模板助手，这会与当前项目级管理逻辑冲突。若要切到“注册后空白账号”，请执行
-            `lobehub-admin-module/sql/002_disable_global_auto_provision.sql`。
-          </span>
-        </div>
-      ) : null}
-
       {!actorId ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
@@ -1433,7 +1740,7 @@ export default function App() {
             <SystemHeader
               currentPage={systemPage}
               projectCount={projects.length}
-              activeProjectName={projectDetail?.name}
+              activeProjectName={selectedProjectId ? selectedProjectName : undefined}
               onShowProjectList={() => setSystemPage('project-list')}
               onShowCreatePage={() => setSystemPage('project-create')}
             />
@@ -1467,7 +1774,19 @@ export default function App() {
             ) : null}
 
             {systemPage === 'project-detail' ? (
-              !selectedProjectId || !projectDetail ? (
+              !selectedProjectId ? (
+                <div className="empty-state">
+                  <p className="eyebrow">Project</p>
+                  <h2>Select a project from the list</h2>
+                  <p>Project detail is now separated from the list and create views.</p>
+                </div>
+              ) : isProjectBundleLoading ? (
+                <div className="empty-state">
+                  <p className="eyebrow">Loading</p>
+                  <h2>Loading project detail</h2>
+                  <p>Fetching members, template, and recent job status for the selected project.</p>
+                </div>
+              ) : !hasSelectedProjectDetail ? (
                 <div className="empty-state">
                   <p className="eyebrow">Project</p>
                   <h2>Select a project from the list</h2>
@@ -1477,7 +1796,7 @@ export default function App() {
                 <ProjectWorkbench
                   actorId={actorId}
                   mode="system"
-                  projectDetail={projectDetail}
+                  projectDetail={projectDetail!}
                   selectedTab={selectedTab}
                   setSelectedTab={setSelectedTab}
                   admins={admins}
@@ -1503,6 +1822,7 @@ export default function App() {
                   setSetDefaultAgent={setSetDefaultAgent}
                   templateDirty={templateDirty}
                   hasSavedTemplate={hasSavedTemplate}
+                  provisionBusy={provisionBusy}
                   handleSaveTemplate={handleSaveTemplate}
                   handleRunProvision={handleRunProvision}
                   job={job}
@@ -1584,7 +1904,7 @@ export default function App() {
                   <button
                     key={project.id}
                     className={`project-card${selectedProjectId === project.id ? ' active' : ''}`}
-                    onClick={() => setSelectedProjectId(project.id)}
+                    onClick={() => beginProjectSwitch(project.id)}
                   >
                     <div>
                       <strong>{project.name}</strong>
@@ -1637,6 +1957,7 @@ export default function App() {
                 setSetDefaultAgent={setSetDefaultAgent}
                 templateDirty={templateDirty}
                 hasSavedTemplate={hasSavedTemplate}
+                provisionBusy={provisionBusy}
                 handleSaveTemplate={handleSaveTemplate}
                 handleRunProvision={handleRunProvision}
                 job={job}
@@ -1662,7 +1983,7 @@ export default function App() {
               {projects.length > 1 ? (
                 <label className="field">
                   <span>当前项目</span>
-                  <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)}>
+                  <select value={selectedProjectId} onChange={(event) => beginProjectSwitch(event.target.value)}>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.name}
@@ -1677,7 +1998,18 @@ export default function App() {
               )}
             </section>
 
-            {!selectedProjectId || !projectDetail ? (
+            {!selectedProjectId ? (
+              <div className="empty-state">
+                <p className="eyebrow">Workspace</p>
+                <h2>当前没有可用项目</h2>
+              </div>
+            ) : isProjectBundleLoading ? (
+              <div className="empty-state">
+                <p className="eyebrow">Loading</p>
+                <h2>正在切换项目</h2>
+                <p>正在加载当前项目的成员、模板和任务状态。</p>
+              </div>
+            ) : !hasSelectedProjectDetail ? (
               <div className="empty-state">
                 <p className="eyebrow">Workspace</p>
                 <h2>当前没有可用项目</h2>
@@ -1712,6 +2044,7 @@ export default function App() {
                 setSetDefaultAgent={setSetDefaultAgent}
                 templateDirty={templateDirty}
                 hasSavedTemplate={hasSavedTemplate}
+                provisionBusy={provisionBusy}
                 handleSaveTemplate={handleSaveTemplate}
                 handleRunProvision={handleRunProvision}
                 job={job}
@@ -1724,7 +2057,18 @@ export default function App() {
       ) : portalMode === 'member' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            {!selectedProjectId || !projectDetail ? (
+            {!selectedProjectId ? (
+              <div className="empty-state">
+                <p className="eyebrow">Workspace</p>
+                <h2>当前没有可用项目</h2>
+              </div>
+            ) : isProjectBundleLoading ? (
+              <div className="empty-state">
+                <p className="eyebrow">Loading</p>
+                <h2>正在切换项目</h2>
+                <p>正在加载当前项目信息和你的对话统计视图。</p>
+              </div>
+            ) : !hasSelectedProjectDetail ? (
               <div className="empty-state">
                 <p className="eyebrow">Workspace</p>
                 <h2>当前没有可用项目</h2>
@@ -1732,10 +2076,10 @@ export default function App() {
             ) : (
               <MemberProjectWorkspace
                 actorId={actorId}
-                projectDetail={projectDetail}
+                projectDetail={projectDetail!}
                 projects={projects}
                 selectedProjectId={selectedProjectId}
-                setSelectedProjectId={setSelectedProjectId}
+                setSelectedProjectId={beginProjectSwitch}
                 loadingDetail={loadingDetail}
                 onFeedback={setFeedback}
               />

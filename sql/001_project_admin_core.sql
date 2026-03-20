@@ -426,7 +426,8 @@ BEGIN
      AND NOT p_force_refresh
      AND existing_map.template_user_id = p_template_user_id
      AND existing_map.template_agent_id = p_template_agent_id
-     AND existing_map.managed_agent_id IS NOT NULL THEN
+     AND existing_map.managed_agent_id IS NOT NULL
+     AND existing_map.managed_session_id IS NOT NULL THEN
     status := 'skipped';
     message := 'Already provisioned with current template';
     managed_agent_id := existing_map.managed_agent_id;
@@ -468,98 +469,9 @@ BEGIN
     WHERE s.user_id = p_template_user_id;
   END IF;
 
-  IF existing_map.managed_agent_id IS NOT NULL THEN
-    UPDATE public.agents
-    SET slug              = v_agent_slug,
-        title             = tpl_agent.title,
-        description       = tpl_agent.description,
-        tags              = tpl_agent.tags,
-        avatar            = tpl_agent.avatar,
-        background_color  = tpl_agent.background_color,
-        plugins           = tpl_agent.plugins,
-        chat_config       = tpl_agent.chat_config,
-        few_shots         = tpl_agent.few_shots,
-        model             = tpl_agent.model,
-        params            = tpl_agent.params,
-        provider          = tpl_agent.provider,
-        system_role       = tpl_agent.system_role,
-        tts               = tpl_agent.tts,
-        updated_at        = now(),
-        accessed_at       = now(),
-        opening_message   = tpl_agent.opening_message,
-        opening_questions = tpl_agent.opening_questions,
-        virtual           = tpl_agent.virtual,
-        market_identifier = tpl_agent.market_identifier,
-        editor_data       = tpl_agent.editor_data,
-        pinned            = true,
-        agency_config     = tpl_agent.agency_config
-    WHERE id = existing_map.managed_agent_id
-      AND user_id = p_target_user_id
-    RETURNING id INTO v_managed_agent_id;
-  END IF;
-
-  IF v_managed_agent_id IS NULL THEN
-    INSERT INTO public.agents (
-      id, slug, title, description, tags, avatar, background_color, plugins, user_id,
-      chat_config, few_shots, model, params, provider, system_role, tts,
-      created_at, updated_at, accessed_at, client_id, opening_message, opening_questions,
-      virtual, market_identifier, editor_data, pinned, session_group_id, agency_config
-    )
-    VALUES (
-      'agt_' || substr(md5(p_target_user_id || ':' || p_project_id || ':managed'), 1, 12),
-      v_agent_slug,
-      tpl_agent.title,
-      tpl_agent.description,
-      tpl_agent.tags,
-      tpl_agent.avatar,
-      tpl_agent.background_color,
-      tpl_agent.plugins,
-      p_target_user_id,
-      tpl_agent.chat_config,
-      tpl_agent.few_shots,
-      tpl_agent.model,
-      tpl_agent.params,
-      tpl_agent.provider,
-      tpl_agent.system_role,
-      tpl_agent.tts,
-      now(),
-      now(),
-      now(),
-      NULL,
-      tpl_agent.opening_message,
-      tpl_agent.opening_questions,
-      tpl_agent.virtual,
-      tpl_agent.market_identifier,
-      tpl_agent.editor_data,
-      true,
-      NULL,
-      tpl_agent.agency_config
-    )
-    ON CONFLICT (slug, user_id) DO UPDATE
-      SET title             = EXCLUDED.title,
-          description       = EXCLUDED.description,
-          tags              = EXCLUDED.tags,
-          avatar            = EXCLUDED.avatar,
-          background_color  = EXCLUDED.background_color,
-          plugins           = EXCLUDED.plugins,
-          chat_config       = EXCLUDED.chat_config,
-          few_shots         = EXCLUDED.few_shots,
-          model             = EXCLUDED.model,
-          params            = EXCLUDED.params,
-          provider          = EXCLUDED.provider,
-          system_role       = EXCLUDED.system_role,
-          tts               = EXCLUDED.tts,
-          updated_at        = now(),
-          accessed_at       = now(),
-          opening_message   = EXCLUDED.opening_message,
-          opening_questions = EXCLUDED.opening_questions,
-          virtual           = EXCLUDED.virtual,
-          market_identifier = EXCLUDED.market_identifier,
-          editor_data       = EXCLUDED.editor_data,
-          pinned            = true,
-          agency_config     = EXCLUDED.agency_config
-    RETURNING id INTO v_managed_agent_id;
-  END IF;
+  -- Official assistant identity is fixed by (project_id, user_id).
+  -- Prefer the stored mapping; if missing, absorb the legacy managed slug; otherwise create the fixed official assistant.
+  v_managed_agent_id := existing_map.managed_agent_id;
 
   IF v_managed_agent_id IS NULL THEN
     SELECT a.id INTO v_managed_agent_id
@@ -569,51 +481,127 @@ BEGIN
     LIMIT 1;
   END IF;
 
-  IF existing_map.managed_session_id IS NOT NULL THEN
-    UPDATE public.sessions
-    SET slug = v_session_slug,
-        title = tpl_agent.title,
-        description = 'Managed by project ' || p_project_id,
-        avatar = tpl_agent.avatar,
-        background_color = tpl_agent.background_color,
-        pinned = true,
-        updated_at = now(),
-        accessed_at = now()
-    WHERE id = existing_map.managed_session_id
-      AND user_id = p_target_user_id
-    RETURNING id INTO v_managed_session_id;
+  IF v_managed_agent_id IS NULL THEN
+    v_managed_agent_id := 'agt_' || substr(md5(p_target_user_id || ':' || p_project_id || ':managed'), 1, 12);
+  END IF;
+
+  INSERT INTO public.agents (
+    id, slug, title, description, tags, avatar, background_color, plugins, user_id,
+    chat_config, few_shots, model, params, provider, system_role, tts,
+    created_at, updated_at, accessed_at, client_id, opening_message, opening_questions,
+    virtual, market_identifier, editor_data, pinned, session_group_id, agency_config
+  )
+  VALUES (
+    v_managed_agent_id,
+    v_agent_slug,
+    tpl_agent.title,
+    tpl_agent.description,
+    tpl_agent.tags,
+    tpl_agent.avatar,
+    tpl_agent.background_color,
+    tpl_agent.plugins,
+    p_target_user_id,
+    tpl_agent.chat_config,
+    tpl_agent.few_shots,
+    tpl_agent.model,
+    tpl_agent.params,
+    tpl_agent.provider,
+    tpl_agent.system_role,
+    tpl_agent.tts,
+    now(),
+    now(),
+    now(),
+    NULL,
+    tpl_agent.opening_message,
+    tpl_agent.opening_questions,
+    tpl_agent.virtual,
+    tpl_agent.market_identifier,
+    tpl_agent.editor_data,
+    true,
+    NULL,
+    tpl_agent.agency_config
+  )
+  ON CONFLICT (id) DO UPDATE
+    SET slug              = EXCLUDED.slug,
+        title             = EXCLUDED.title,
+        description       = EXCLUDED.description,
+        tags              = EXCLUDED.tags,
+        avatar            = EXCLUDED.avatar,
+        background_color  = EXCLUDED.background_color,
+        plugins           = EXCLUDED.plugins,
+        chat_config       = EXCLUDED.chat_config,
+        few_shots         = EXCLUDED.few_shots,
+        model             = EXCLUDED.model,
+        params            = EXCLUDED.params,
+        provider          = EXCLUDED.provider,
+        system_role       = EXCLUDED.system_role,
+        tts               = EXCLUDED.tts,
+        updated_at        = now(),
+        accessed_at       = now(),
+        opening_message   = EXCLUDED.opening_message,
+        opening_questions = EXCLUDED.opening_questions,
+        virtual           = EXCLUDED.virtual,
+        market_identifier = EXCLUDED.market_identifier,
+        editor_data       = EXCLUDED.editor_data,
+        pinned            = true,
+        agency_config     = EXCLUDED.agency_config
+  WHERE public.agents.user_id = p_target_user_id
+  RETURNING id INTO v_managed_agent_id;
+
+  IF v_managed_agent_id IS NULL THEN
+    RAISE EXCEPTION 'Managed agent id conflict for target user';
+  END IF;
+
+  v_managed_session_id := existing_map.managed_session_id;
+
+  IF v_managed_session_id IS NULL THEN
+    SELECT s.id INTO v_managed_session_id
+    FROM public.sessions s
+    WHERE s.user_id = p_target_user_id
+      AND s.slug = v_session_slug
+      AND s.type = 'agent'
+    LIMIT 1;
   END IF;
 
   IF v_managed_session_id IS NULL THEN
-    INSERT INTO public.sessions (
-      id, slug, title, description, avatar, background_color, type, user_id,
-      group_id, pinned, created_at, updated_at, client_id, accessed_at
-    )
-    VALUES (
-      'ssn_' || substr(md5(p_target_user_id || ':' || p_project_id || ':managed'), 1, 12),
-      v_session_slug,
-      tpl_agent.title,
-      'Managed by project ' || p_project_id,
-      tpl_agent.avatar,
-      tpl_agent.background_color,
-      'agent',
-      p_target_user_id,
-      NULL,
-      true,
-      now(),
-      now(),
-      NULL,
-      now()
-    )
-    ON CONFLICT (slug, user_id) DO UPDATE
-      SET title = EXCLUDED.title,
-          description = EXCLUDED.description,
-          avatar = EXCLUDED.avatar,
-          background_color = EXCLUDED.background_color,
-          pinned = true,
-          updated_at = now(),
-          accessed_at = now()
-    RETURNING id INTO v_managed_session_id;
+    v_managed_session_id := 'ssn_' || substr(md5(p_target_user_id || ':' || p_project_id || ':managed'), 1, 12);
+  END IF;
+
+  INSERT INTO public.sessions (
+    id, slug, title, description, avatar, background_color, type, user_id,
+    group_id, pinned, created_at, updated_at, client_id, accessed_at
+  )
+  VALUES (
+    v_managed_session_id,
+    v_session_slug,
+    tpl_agent.title,
+    'Managed by project ' || p_project_id,
+    tpl_agent.avatar,
+    tpl_agent.background_color,
+    'agent',
+    p_target_user_id,
+    NULL,
+    true,
+    now(),
+    now(),
+    NULL,
+    now()
+  )
+  ON CONFLICT (id) DO UPDATE
+    SET slug = EXCLUDED.slug,
+        title = EXCLUDED.title,
+        description = EXCLUDED.description,
+        avatar = EXCLUDED.avatar,
+        background_color = EXCLUDED.background_color,
+        pinned = true,
+        updated_at = now(),
+        accessed_at = now()
+  WHERE public.sessions.user_id = p_target_user_id
+    AND public.sessions.type = 'agent'
+  RETURNING id INTO v_managed_session_id;
+
+  IF v_managed_session_id IS NULL THEN
+    RAISE EXCEPTION 'Managed session id conflict for target user';
   END IF;
 
   INSERT INTO public.agents_to_sessions (agent_id, session_id, user_id)

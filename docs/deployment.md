@@ -26,6 +26,38 @@
 
 在 Neon SQL Editor 或远程 `psql` 中执行。
 
+说明：
+- `001_project_admin_core.sql` 只用于新环境全量安装。
+- 如果数据库已经装过旧版 `lobehub_admin` schema，不建议为了升级而重跑整份 `001`。
+
+### 2.1.1 已部署环境的增量升级
+
+如果数据库已经安装过旧版 `lobehub_admin` schema，后续升级优先执行增量 SQL：
+
+- `lobehub-admin-module/sql/005_check_project_managed_mapping_health.sql`
+- `lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql`
+- `lobehub-admin-module/sql/004_repair_project_managed_mappings.sql`
+
+本地 Docker `postgres` 环境优先使用：
+
+```powershell
+.\lobehub-admin-module\scripts\check-project-admin-mappings.ps1
+.\lobehub-admin-module\scripts\upgrade-existing-project-admin.ps1
+```
+
+其中：
+- `005` 用于升级前只读自检，查看映射缺失、悬挂引用、canonical slug 偏差。
+- `003` 用于升级 `provision_project_member(...)` 的官方助手判定逻辑。
+- `004` 用于一次性修复已有 `project_managed_agents` 映射中的助手/会话指针与 canonical slug。
+- `004` 不会凭空推断缺失的项目映射；如果某个成员完全没有 `project_managed_agents` 记录，仍应重新执行一次项目助手配置或刷新。
+
+如果需要单独执行某一份 SQL，再回退使用：
+
+```powershell
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
+```
+
 ### 2.2 如需关闭旧的全局自动下发
 
 如果环境里原本装过旧的自动下发系统，则需要关闭：

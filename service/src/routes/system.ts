@@ -9,7 +9,6 @@ import {
   revokeAdminSessionFromRequest,
   setAdminSessionCookie,
 } from '../auth.js';
-import { query } from '../db.js';
 
 function toActorContext(actor: {
   id: string;
@@ -61,46 +60,5 @@ export async function registerSystemRoutes(app: FastifyInstance) {
     const accessCounts = await getProjectAccessCounts(actor.id);
 
     return toActorContext(actor, accessCounts.managedProjectCount, accessCounts.joinedProjectCount);
-  });
-
-  app.get('/api/system/status', async () => {
-    const [configResult, triggerResult] = await Promise.all([
-      query<{
-        enabled: boolean;
-        template_user_id: string | null;
-        template_agent_id: string | null;
-        updated_at: string | null;
-      }>(
-        `
-        select enabled, template_user_id, template_agent_id, updated_at
-        from public.system_provisioning_config
-        where id = 1
-        limit 1
-        `,
-      ),
-      query<{
-        tgname: string;
-        tgenabled: string;
-      }>(
-        `
-        select tgname, tgenabled
-        from pg_trigger
-        where tgrelid = 'public.users'::regclass
-          and not tgisinternal
-          and tgname = 'trg_provision_on_user_insert'
-        `,
-      ),
-    ]);
-
-    return {
-      legacyAutoProvision: {
-        triggerInstalled: Boolean(triggerResult.rows[0]),
-        triggerEnabled: triggerResult.rows[0]?.tgenabled === 'O',
-        configEnabled: configResult.rows[0]?.enabled ?? null,
-        templateUserId: configResult.rows[0]?.template_user_id ?? null,
-        templateAgentId: configResult.rows[0]?.template_agent_id ?? null,
-        updatedAt: configResult.rows[0]?.updated_at ?? null,
-      },
-    };
   });
 }

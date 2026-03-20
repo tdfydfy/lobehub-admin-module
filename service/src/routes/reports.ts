@@ -786,9 +786,9 @@ export async function registerReportRoutes(app: FastifyInstance) {
           nullif(
             left(
               coalesce(
-                nullif(btrim(last_message.content), ''),
-                nullif(btrim(t.content), ''),
-                nullif(btrim(t.history_summary), '')
+                nullif(last_message.content, ''),
+                nullif(t.content, ''),
+                nullif(t.history_summary, '')
               ),
               200
             ),
@@ -801,11 +801,28 @@ export async function registerReportRoutes(app: FastifyInstance) {
             max(m.created_at) as last_message_at
           from public.messages m
           where m.topic_id = t.id
+            and m.role <> 'tool'
+            and (
+              length(trim(coalesce(m.content, ''))) > 0
+              or length(trim(coalesce(m.summary, ''))) > 0
+              or m.editor_data is not null
+            )
         ) message_stats on true
         left join lateral (
-          select m.content
+          select coalesce(
+            nullif(trim(m.content), ''),
+            nullif(trim(m.summary), ''),
+            case when m.editor_data is not null then m.editor_data::text else null end,
+            null
+          ) as content
           from public.messages m
           where m.topic_id = t.id
+            and m.role <> 'tool'
+            and (
+              length(trim(coalesce(m.content, ''))) > 0
+              or length(trim(coalesce(m.summary, ''))) > 0
+              or m.editor_data is not null
+            )
           order by m.created_at desc nulls last, m.id desc
           limit 1
         ) last_message on true
@@ -901,20 +918,24 @@ export async function registerReportRoutes(app: FastifyInstance) {
         m.id,
         m.role,
         coalesce(
-          nullif(m.content, ''),
-          nullif(m.summary, ''),
+          nullif(trim(m.content), ''),
+          nullif(trim(m.summary), ''),
           case when m.editor_data is not null then m.editor_data::text else null end,
-          '[empty]'
+          null
         ) as content,
         m.created_at,
         m.updated_at
       from public.messages m
       where m.topic_id = $1
-        and m.user_id = $2
-        and m.session_id = $3
+        and m.role <> 'tool'
+        and (
+          length(trim(coalesce(m.content, ''))) > 0
+          or length(trim(coalesce(m.summary, ''))) > 0
+          or m.editor_data is not null
+        )
       order by m.created_at asc, m.id asc
       `,
-      [topic.topic_id, topic.user_id, topic.managed_session_id],
+      [topic.topic_id],
     );
 
     return {

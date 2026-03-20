@@ -3,14 +3,19 @@ param(
   [string]$RepoRoot = ""
 )
 
-$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "_admin-common.ps1")
+
+$defaultRepoRoot = Get-AdminRepoRoot -ScriptRoot $PSScriptRoot
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
-  $RepoRoot = Join-Path $PSScriptRoot ".."
+  $resolvedRepoRoot = $defaultRepoRoot
+}
+else {
+  $resolvedRepoRoot = Resolve-AdminPath -Path $RepoRoot -BaseDirectories @($defaultRepoRoot, (Split-Path $defaultRepoRoot -Parent))
 }
 
-$apiScript = Join-Path $RepoRoot "scripts/start-admin-api.ps1"
-$webScript = Join-Path $RepoRoot "scripts/start-admin-web.ps1"
+$apiScript = Join-Path $resolvedRepoRoot "scripts/start-admin-api.ps1"
+$webScript = Join-Path $resolvedRepoRoot "scripts/start-admin-web.ps1"
 
 if (-not (Test-Path $apiScript)) {
   throw "Script not found: $apiScript"

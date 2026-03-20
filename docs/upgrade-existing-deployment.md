@@ -44,6 +44,41 @@ npm install
 npm run build
 ```
 
+## 3.1 已部署数据库的增量 SQL
+
+如果服务器数据库已经装过旧版 `lobehub_admin` schema，这次不要重跑整份 `001_project_admin_core.sql`，而是按顺序执行：
+
+```powershell
+cd D:\lobe-hub2
+.\lobehub-admin-module\scripts\check-project-admin-mappings.ps1
+.\lobehub-admin-module\scripts\upgrade-existing-project-admin.ps1
+```
+
+用途：
+- `005_check_project_managed_mapping_health.sql`
+  - 升级前只读自检
+  - 查看哪些成员完全没有官方映射
+  - 查看哪些映射缺少助手 ID、会话 ID、canonical slug 或存在悬挂引用
+- `003_fix_provision_skip_requires_session.sql`
+  - 升级 `provision_project_member(...)`
+  - 官方助手现在只按 `(project_id, user_id)` 识别
+  - 只有官方助手和官方会话都存在时才允许直接 `skipped`
+- `004_repair_project_managed_mappings.sql`
+  - 一次性修复已有 `project_managed_agents` 映射中的助手/会话 ID
+  - 规范官方助手和官方会话的 canonical slug
+  - 补齐 `agents_to_sessions` 关联
+
+限制：
+- `004` 只修复已经存在的项目映射。
+- 如果某个成员完全没有 `project_managed_agents` 记录，仍需在项目页重新执行一次“为成员配置助手”或“刷新成员助手”。
+
+如果需要拆开执行，再使用：
+
+```powershell
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
+```
+
 ## 4. 上传需要更新的文件
 
 ### 4.1 后端
@@ -164,6 +199,8 @@ docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehu
 - 选错模板助手时，保存模板返回明确业务错误
 - 成员能登录并查看自己的 Topic
 - `/api/projects/:projectId/agents` 不再报 `rt_fetch used out-of-bounds`
+- 执行“为成员配置助手”或“刷新成员助手”时，请求会快速返回任务 ID，而不是长时间阻塞
+- 同一项目同一成员不会重复新增官方助手，只会更新既有官方助手/官方会话
 
 ## 9. 升级特别提醒
 
