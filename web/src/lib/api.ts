@@ -1,12 +1,17 @@
-import type {
+﻿import type {
   AgentOption,
   ActorContext,
   DatabaseTableListResult,
   DatabaseTableDataResult,
   JobDetail,
   JobItem,
+  DailyReportJob,
   ProjectMember,
   ProjectMemberAssistantDetail,
+  ProjectDailyReportDetailResult,
+  ProjectDailyReportListFilters,
+  ProjectDailyReportListResult,
+  ProjectDailyReportSettings,
   ProjectReportFilters,
   ProjectReportResult,
   ProjectTopicDetailResult,
@@ -283,5 +288,59 @@ export const api = {
       {
         actorId,
       },
+    ),
+
+  getProjectDailyReportSettings: async (actorId: string, projectId: string) =>
+    request<{ settings: ProjectDailyReportSettings }>(
+      `/api/projects/${projectId}/reports/daily-settings`,
+      { actorId },
+    ),
+
+  updateProjectDailyReportSettings: async (
+    actorId: string,
+    projectId: string,
+    payload: Omit<ProjectDailyReportSettings, 'projectId' | 'systemPrompt' | 'updatedBy' | 'createdAt' | 'updatedAt'>,
+  ) =>
+    request<{ settings: ProjectDailyReportSettings }>(
+      `/api/projects/${projectId}/reports/daily-settings`,
+      {
+        method: 'PUT',
+        actorId,
+        body: payload,
+      },
+    ),
+
+  listProjectDailyReports: async (actorId: string, projectId: string, filters: ProjectDailyReportListFilters) =>
+    request<ProjectDailyReportListResult>(
+      `/api/projects/${projectId}/reports/daily-reports${buildQueryString(filters)}`,
+      { actorId },
+    ),
+
+  getProjectDailyReportDetail: async (actorId: string, projectId: string, reportId: string) =>
+    request<ProjectDailyReportDetailResult>(
+      `/api/projects/${projectId}/reports/daily-reports/${encodeURIComponent(reportId)}`,
+      { actorId },
+    ),
+
+  runProjectDailyReport: async (actorId: string, projectId: string, businessDate?: string) =>
+    request<{ jobId: string | null; businessDate: string }>(
+      `/api/projects/${projectId}/reports/daily-reports/run`,
+      {
+        method: 'POST',
+        actorId,
+        body: businessDate ? { businessDate } : {},
+      },
+    ),
+
+  listProjectDailyReportJobs: async (actorId: string, projectId: string) =>
+    request<{ jobs: DailyReportJob[] }>(
+      `/api/projects/${projectId}/reports/daily-jobs`,
+      { actorId },
+    ),
+
+  getProjectDailyReportJob: async (actorId: string, projectId: string, jobId: string) =>
+    request<{ job: DailyReportJob }>(
+      `/api/projects/${projectId}/reports/daily-jobs/${encodeURIComponent(jobId)}`,
+      { actorId },
     ),
 };

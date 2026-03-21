@@ -13,7 +13,9 @@ $resolvedSqlRoot = Resolve-AdminSqlPath -SqlPath $SqlRoot -ScriptRoot $PSScriptR
 
 $sqlFiles = @(
   (Join-Path $resolvedSqlRoot "003_fix_provision_skip_requires_session.sql"),
-  (Join-Path $resolvedSqlRoot "004_repair_project_managed_mappings.sql")
+  (Join-Path $resolvedSqlRoot "004_repair_project_managed_mappings.sql"),
+  (Join-Path $resolvedSqlRoot "006_daily_reports.sql"),
+  (Join-Path $resolvedSqlRoot "007_daily_report_volcengine_provider.sql")
 )
 
 foreach ($sqlFile in $sqlFiles) {

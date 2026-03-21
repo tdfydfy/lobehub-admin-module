@@ -25,6 +25,10 @@ const envSchema = z.object({
   CORS_ORIGIN: z
     .string()
     .default('http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:4174,http://localhost:4174'),
+  DAILY_REPORT_DEFAULT_MODEL_PROVIDER: z.enum(['volcengine', 'fallback']).optional(),
+  DAILY_REPORT_DEFAULT_MODEL_NAME: z.string().trim().optional(),
+  VOLCENGINE_API_KEY: z.string().trim().optional(),
+  VOLCENGINE_BASE_URL: z.string().trim().optional(),
 });
 
 export const env = envSchema.parse(process.env);

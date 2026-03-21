@@ -1,4 +1,4 @@
-export type UserOption = {
+﻿export type UserOption = {
   id: string;
   email: string | null;
   avatar: string | null;
@@ -214,7 +214,6 @@ export type ProjectReportResult = {
     totalPages: number;
   };
 };
-
 export type ProjectTopicStatsRangePreset = 'today' | 'last3days' | 'last7days' | 'last30days' | 'custom';
 
 export type ProjectTopicStatsFilters = {
@@ -319,6 +318,112 @@ export type ProjectTopicDetail = {
 export type ProjectTopicDetailResult = {
   topic: ProjectTopicDetail;
   messages: ProjectTopicMessage[];
+};
+
+export type DailyReportModelProvider = 'volcengine' | 'fallback';
+
+export type ProjectDailyReportSettings = {
+  projectId: string;
+  enabled: boolean;
+  timezone: string;
+  businessDayCloseTimeLocal: string;
+  systemPrompt: string;
+  promptTemplate: string;
+  generateWhenNoVisit: boolean;
+  modelProviderOverride: DailyReportModelProvider | null;
+  modelNameOverride: string | null;
+  updatedBy: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ProjectDailyReportListFilters = {
+  businessDateFrom?: string;
+  businessDateTo?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ProjectDailyReportListItem = {
+  reportId: string;
+  businessDate: string;
+  revision: number;
+  isCurrent: boolean;
+  visitedCustomerCount: number;
+  activeTopicCount: number;
+  totalMessageCount: number;
+  userMessageCount: number;
+  assistantMessageCount: number;
+  modelProvider: string;
+  modelName: string;
+  generatedAt: string;
+};
+
+export type ProjectDailyReportListResult = {
+  rows: ProjectDailyReportListItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type ProjectDailyReportDetail = {
+  id: string;
+  projectId: string;
+  businessDate: string;
+  revision: number;
+  isCurrent: boolean;
+  jobId: string | null;
+  timezone: string;
+  windowStartAt: string;
+  windowEndAt: string;
+  visitedCustomerCount: number;
+  activeTopicCount: number;
+  totalMessageCount: number;
+  userMessageCount: number;
+  assistantMessageCount: number;
+  summaryJson: Record<string, unknown>;
+  summaryMarkdown: string;
+  promptSnapshot: string;
+  systemPromptVersion: string;
+  modelProvider: string;
+  modelName: string;
+  generationMeta: Record<string, unknown> | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectDailyReportDetailResult = {
+  report: ProjectDailyReportDetail;
+};
+
+export type DailyReportJob = {
+  id: string;
+  projectId: string;
+  businessDate: string;
+  triggerSource: 'scheduled' | 'manual' | 'retry';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  timezone: string;
+  closeTimeLocal: string;
+  windowStartAt: string;
+  windowEndAt: string;
+  promptSnapshot: string;
+  modelProvider: string;
+  modelName: string;
+  reportId: string | null;
+  createdBy: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DailyReportJobsResult = {
+  jobs: DailyReportJob[];
 };
 
 export type DatabaseTableOption = {

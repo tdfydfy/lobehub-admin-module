@@ -1,5 +1,34 @@
 # LobeHub Admin Module
 
+## Update 2026-03-21
+
+- 新增“项目经营日报”能力：
+  - 统计口径按营业日窗口内的真实消息时间
+  - 主视角改为“客户来访组 / 项目经营管理”，不再按销售个人表现输出
+  - 支持日报列表、日报详情、手动生成、自动调度
+- 数据库与升级脚本已补齐日报相关增量：
+  - 新环境的 `sql/001_project_admin_core.sql` 已包含日报表、索引与触发器
+  - 已部署旧环境新增 `sql/006_daily_reports.sql` 与 `sql/007_daily_report_volcengine_provider.sql`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007`
+- 日报正文已切到火山 `volcengine` 模型：
+  - 使用 `https://ark.cn-beijing.volces.com/api/v3/responses`
+  - 当前默认模型为 `doubao-seed-2-0-lite-260215`
+  - 如模型调用失败，仍会回退到内建规则摘要
+- 服务端已新增日报模型环境变量：
+  - `DAILY_REPORT_DEFAULT_MODEL_PROVIDER`
+  - `DAILY_REPORT_DEFAULT_MODEL_NAME`
+  - `VOLCENGINE_API_KEY`
+  - `VOLCENGINE_BASE_URL`
+- 日报提示词结构已收敛为两层：
+  - 系统提示词：固定、只读、前端展示但不可编辑
+  - 项目补充要求：项目级可编辑
+  - 已移除额外第三层“正文生成任务提示”
+- 部署口径已统一：
+  - `ali-temp`
+  - `ali-2c2g`
+  - 两台服务器主站 `lobehub` 当前都应以修正后的 `/home/admin/lobehub/docker-compose.yml` 运行
+  - 当前口径为 `VOLCENGINE_*` 生效，`NEWAPI_*` 不再作为主站运行配置
+
 ## Update 2026-03-20
 
 - 修复“对话统计 -> Topic 详情”消息展示口径：
@@ -77,6 +106,7 @@
 - 独立前端管理端
 - 基于现有账号体系的后台登录
 - 项目成员运营报表
+- 项目经营日报
 - 项目对话统计与下钻查看
 - 数据查看页面
 
@@ -90,6 +120,8 @@
 - `sql/003_fix_provision_skip_requires_session.sql`：已部署环境的函数增量升级
 - `sql/004_repair_project_managed_mappings.sql`：一次性修复已有官方助手映射
 - `sql/005_check_project_managed_mapping_health.sql`：升级前只读自检
+- `sql/006_daily_reports.sql`：已部署环境补齐日报设置、任务、结果表
+- `sql/007_daily_report_volcengine_provider.sql`：将日报模型 provider 覆盖口径扩展为 `volcengine / fallback`
 - `scripts/apply-project-admin-core.ps1`：安装核心 schema
 - `scripts/check-project-admin-mappings.ps1`：执行升级前映射健康检查
 - `scripts/upgrade-existing-project-admin.ps1`：执行已部署环境的增量升级
@@ -107,6 +139,7 @@
 3. 已部署旧环境按需执行：
    - 先执行 `scripts/check-project-admin-mappings.ps1`
    - 再执行 `scripts/upgrade-existing-project-admin.ps1`
+   - 当前升级脚本会自动串行执行 `003 / 004 / 006 / 007`
 4. 启动独立管理端 API
 5. 启动独立管理端 UI
 
@@ -114,6 +147,8 @@
 - `001` 是全量初始化脚本，适合新库。
 - `003` 是增量升级脚本，适合已经安装过旧版 `lobehub_admin` schema 的数据库。
 - `004` 是一次性修复脚本，只修复 `project_managed_agents` 中已经存在的官方助手/会话映射；如果某个项目成员完全没有映射记录，仍应重新执行一次“赋予助手”或“刷新助手”。
+- `006` 是日报能力的结构补齐脚本，适合已经装过旧版 schema、但数据库里尚无日报表结构的环境。
+- `007` 是日报 provider 约束修正脚本，用于将日报模型配置明确收敛到 `volcengine / fallback`。
 
 当前实际线上整合方案：
 
@@ -140,6 +175,10 @@
 - 模板助手选择与保存
 - 批量配置/刷新任务与任务结果查看
 - 项目成员运营报表
+- 项目经营日报
+  - 支持项目级日报设置、营业日截点、项目补充要求、模型覆盖
+  - 支持手动生成、自动调度、任务轮询、列表查询、详情查看
+  - 支持查看结构化 JSON 与 Markdown 原文
 - 项目对话统计
   - 统计口径为项目托管会话内创建的 `topic`
   - 支持当日、近三天、近七天、一个月、指定日期范围

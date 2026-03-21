@@ -37,6 +37,8 @@
 - `lobehub-admin-module/sql/005_check_project_managed_mapping_health.sql`
 - `lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql`
 - `lobehub-admin-module/sql/004_repair_project_managed_mappings.sql`
+- `lobehub-admin-module/sql/006_daily_reports.sql`
+- `lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql`
 
 本地 Docker `postgres` 环境优先使用：
 
@@ -50,12 +52,16 @@
 - `003` 用于升级 `provision_project_member(...)` 的官方助手判定逻辑。
 - `004` 用于一次性修复已有 `project_managed_agents` 映射中的助手/会话指针与 canonical slug。
 - `004` 不会凭空推断缺失的项目映射；如果某个成员完全没有 `project_managed_agents` 记录，仍应重新执行一次项目助手配置或刷新。
+- `006` 用于补齐日报设置表、日报任务表、日报结果表，以及对应索引与触发器。
+- `007` 用于将日报模型 provider 的约束修正为 `volcengine / fallback`。
 
 如果需要单独执行某一份 SQL，再回退使用：
 
 ```powershell
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/006_daily_reports.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql"
 ```
 
 ### 2.2 如需关闭旧的全局自动下发
@@ -101,6 +107,13 @@ ADMIN_SESSION_COOKIE_NAME=lobehub_admin_session
 ADMIN_SESSION_TTL_HOURS=12
 ADMIN_SESSION_SECURE_COOKIE=false
 ALLOW_LEGACY_ACTOR_HEADER=false
+TRUST_PROXY=false
+
+# Daily report generation
+DAILY_REPORT_DEFAULT_MODEL_PROVIDER=fallback
+# DAILY_REPORT_DEFAULT_MODEL_NAME=doubao-seed-2-0-lite-260215
+# VOLCENGINE_API_KEY=your-volcengine-api-key
+# VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ```
 
 启动：
@@ -115,6 +128,11 @@ npm run dev
 ```text
 http://127.0.0.1:3321
 ```
+
+补充说明：
+- 服务进程启动时会自动恢复未完成的日报任务。
+- 服务进程会每 60 秒扫描一次已启用项目的日报到点情况。
+- 如果未显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER`，但配置了 `VOLCENGINE_API_KEY`，当前会默认走 `volcengine`；否则回退为内建摘要器。
 
 ## 3.1 当前线上实际运行方式
 
@@ -277,6 +295,10 @@ npm run build
 - 过滤内部助手候选，仅展示适合做模板的助手
 - 后台邮箱密码登录
 - 项目成员运营报表
+- 项目经营日报
+  - 可配置时区、营业日截点、项目补充要求、空来访时是否生成
+  - 可覆盖日报模型 provider / model name
+  - 支持手动触发、自动调度、任务查询、日报列表与详情
 - 数据查看
   - 首页项目详情页已接入“数据查看”标签
   - 同时提供独立入口页 `database-viewer.html`
@@ -294,3 +316,19 @@ npm run build
 - Docker 化独立部署
 - 生产态静态资源托管
 - skill 同名覆盖治理
+## 9. 2026-03-21 补充
+
+- 日报模型部署口径已切到 `volcengine`，推荐显式配置：
+
+```env
+DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine
+DAILY_REPORT_DEFAULT_MODEL_NAME=doubao-seed-2-0-lite-260215
+VOLCENGINE_API_KEY=your-volcengine-api-key
+VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+```
+
+- 日报提示词当前固定为两层：
+  - 系统提示词：固定、只读、前端可见但不可编辑
+  - 项目补充要求：项目级可编辑
+- 当前主站 `lobehub` 运行口径应使用修正后的 `/home/admin/lobehub/docker-compose.yml`。
+- 当前主站 provider 方向为 `VOLCENGINE_*`，`NEWAPI_*` 不再作为本部署路径下的主站运行配置。

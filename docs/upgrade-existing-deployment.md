@@ -18,6 +18,10 @@
 - 成员登录与自有 Topic 查看
 - 模板管理员 / 模板助手归属校验修复
 - `/api/projects/:projectId/agents` 的 `rt_fetch used out-of-bounds` 规避
+- 项目经营日报能力
+  - 日报设置、日报任务、日报结果表结构
+  - 日报手动生成、自动调度、列表与详情
+  - `volcengine` 作为当前推荐日报模型 provider
 - 双域名 HTTPS 支持
 - HTTP IP 兜底入口保留
 - SPA HTML `no-cache` 网关头
@@ -67,6 +71,11 @@ cd D:\lobe-hub2
   - 一次性修复已有 `project_managed_agents` 映射中的助手/会话 ID
   - 规范官方助手和官方会话的 canonical slug
   - 补齐 `agents_to_sessions` 关联
+- `006_daily_reports.sql`
+  - 增加日报设置表、日报任务表、日报结果表
+  - 补齐相关索引与 `updated_at` 触发器
+- `007_daily_report_volcengine_provider.sql`
+  - 将日报模型 provider 约束扩展为 `volcengine / fallback`
 
 限制：
 - `004` 只修复已经存在的项目映射。
@@ -77,6 +86,8 @@ cd D:\lobe-hub2
 ```powershell
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/006_daily_reports.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql"
 ```
 
 ## 4. 上传需要更新的文件
@@ -139,7 +150,17 @@ HOST=0.0.0.0
 CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95
 ADMIN_SESSION_SECURE_COOKIE=false
 TRUST_PROXY=true
+DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine
+DAILY_REPORT_DEFAULT_MODEL_NAME=doubao-seed-2-0-lite-260215
+VOLCENGINE_API_KEY=your-volcengine-api-key
+VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ```
+
+日报补充说明：
+- 当前推荐显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine`。
+- 如未显式设置 provider，但存在 `VOLCENGINE_API_KEY`，日报会默认走 `volcengine`。
+- 日报提示词当前固定为两层：系统提示词 + 项目补充要求。
+- 服务重启后会自动恢复未完成日报任务，并继续每 60 秒执行一次到点扫描。
 
 ### 为什么这里还是 `false`
 
@@ -201,6 +222,9 @@ docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehu
 - `/api/projects/:projectId/agents` 不再报 `rt_fetch used out-of-bounds`
 - 执行“为成员配置助手”或“刷新成员助手”时，请求会快速返回任务 ID，而不是长时间阻塞
 - 同一项目同一成员不会重复新增官方助手，只会更新既有官方助手/官方会话
+- “日报”标签页能正常加载设置、任务和日报列表
+- 手动生成日报后，任务能转成 `completed`，并能在列表里看到新日报
+- 日报详情能查看正文、结构化 JSON、模型 provider / model name
 
 ## 9. 升级特别提醒
 
@@ -218,6 +242,18 @@ docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehu
 - 已重启 `nginx-gateway`
 
 因为这次网关配置包含 SPA HTML 的 `no-cache` 头修复。
+
+### 9.3 日报模型配置方向
+
+当前两台已验证服务器上的主站 `lobehub`，都应运行修正后的：
+- `/home/admin/lobehub/docker-compose.yml`
+
+当前主站 provider 方向是：
+- `VOLCENGINE_*`
+
+因此本次升级路径下：
+- `NEWAPI_*` 不再作为主站实际运行配置
+- 管理端日报模型也应优先对齐 `volcengine`
 
 ## 10. 回滚方式
 

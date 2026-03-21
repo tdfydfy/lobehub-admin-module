@@ -1,5 +1,6 @@
 ﻿import { DatabaseTablePanel } from './components/DatabaseTablePanel';
 import { Fragment, useEffect, useState } from 'react';
+import { ProjectDailyReportPanel } from './components/ProjectDailyReportPanel';
 import { formatTimeToShanghai } from './lib/time';
 import { ProjectReportPanel } from './components/ProjectReportPanel';
 import { ProjectTopicStatsPanel } from './components/ProjectTopicStatsPanel';
@@ -17,7 +18,7 @@ import type {
   UserOption,
 } from './types';
 
-type TabKey = 'members' | 'assistant' | 'data' | 'topic' | 'browser';
+type TabKey = 'members' | 'assistant' | 'data' | 'daily' | 'topic' | 'browser';
 type PortalMode = 'system' | 'workspace' | 'member' | 'empty';
 type WorkbenchMode = 'system' | 'workspace' | 'member';
 type SystemPage = 'project-list' | 'project-create' | 'project-detail';
@@ -455,6 +456,9 @@ function ProjectWorkbench({
         <button className={selectedTab === 'data' ? 'active' : ''} onClick={() => setSelectedTab('data')}>
           数据报表
         </button>
+        <button className={selectedTab === 'daily' ? 'active' : ''} onClick={() => setSelectedTab('daily')}>
+          日报
+        </button>
         <button className={selectedTab === 'topic' ? 'active' : ''} onClick={() => setSelectedTab('topic')}>
           对话统计
         </button>
@@ -784,6 +788,14 @@ function ProjectWorkbench({
           actorId={actorId}
           projectId={projectDetail.id}
           projectMembers={rows}
+          onFeedback={setFeedback}
+        />
+      ) : null}
+
+      {selectedTab === 'daily' ? (
+        <ProjectDailyReportPanel
+          actorId={actorId}
+          projectId={projectDetail.id}
           onFeedback={setFeedback}
         />
       ) : null}

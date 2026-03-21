@@ -1,12 +1,16 @@
 import { env } from './config.js';
 import { db } from './db.js';
+import { resumePendingDailyReportJobs, startDailyReportScheduler, stopDailyReportScheduler } from './daily-report-jobs.js';
 import { resumePendingProvisionJobs } from './provision-jobs.js';
 import { buildApp } from './app.js';
 
 const app = await buildApp();
 await resumePendingProvisionJobs(app.log);
+await resumePendingDailyReportJobs(app.log);
+startDailyReportScheduler(app.log);
 
 const shutdown = async () => {
+  stopDailyReportScheduler();
   await app.close();
   await db.end();
   process.exit(0);

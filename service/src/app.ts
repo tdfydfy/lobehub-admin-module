@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { ZodError } from 'zod';
 import { ensureAdminAuthSchema } from './auth.js';
 import { corsOrigins, env } from './config.js';
+import { registerDailyReportRoutes } from './routes/daily-reports.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -74,6 +75,7 @@ export async function buildApp() {
   await registerDatabaseRoutes(app);
   await registerProjectRoutes(app);
   await registerReportRoutes(app);
+  await registerDailyReportRoutes(app);
 
   return app;
 }

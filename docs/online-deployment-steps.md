@@ -57,18 +57,24 @@
    - [005_check_project_managed_mapping_health.sql](/D:/lobe-hub2/lobehub-admin-module/sql/005_check_project_managed_mapping_health.sql)
    - [003_fix_provision_skip_requires_session.sql](/D:/lobe-hub2/lobehub-admin-module/sql/003_fix_provision_skip_requires_session.sql)
    - [004_repair_project_managed_mappings.sql](/D:/lobe-hub2/lobehub-admin-module/sql/004_repair_project_managed_mappings.sql)
+   - [006_daily_reports.sql](/D:/lobe-hub2/lobehub-admin-module/sql/006_daily_reports.sql)
+   - [007_daily_report_volcengine_provider.sql](/D:/lobe-hub2/lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql)
 
 说明：
 - `001` 是新库全量安装。
 - `005` 是升级前只读自检。
 - `003` 是函数增量升级。
 - `004` 是一次性修复已有 `project_managed_agents` 映射中的官方助手/官方会话指针。
+- `006` 是日报能力数据库结构补齐。
+- `007` 是日报模型 provider 约束修正。
 - 本地 Docker `postgres` 环境可直接执行：
 
 ```powershell
 .\lobehub-admin-module\scripts\check-project-admin-mappings.ps1
 .\lobehub-admin-module\scripts\upgrade-existing-project-admin.ps1
 ```
+
+当前 `upgrade-existing-project-admin.ps1` 会自动串行执行 `003 / 004 / 006 / 007`。
 
 ## 3. 本地构建
 
@@ -153,7 +159,17 @@ ADMIN_SESSION_TTL_HOURS=12
 ADMIN_SESSION_SECURE_COOKIE=false
 ALLOW_LEGACY_ACTOR_HEADER=false
 TRUST_PROXY=true
+DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine
+DAILY_REPORT_DEFAULT_MODEL_NAME=doubao-seed-2-0-lite-260215
+VOLCENGINE_API_KEY=your-volcengine-api-key
+VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ```
+
+日报补充说明：
+- 当前日报 provider 推荐显式设为 `volcengine`。
+- 如未显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER`，但服务端存在 `VOLCENGINE_API_KEY`，系统会默认走 `volcengine`。
+- 服务进程启动后会自动恢复未完成的日报任务，并每 60 秒扫描一次已启用项目的到点日报。
+- 日报提示词当前只保留两层：系统提示词 + 项目补充要求。
 
 ### 为什么这里仍然是 `ADMIN_SESSION_SECURE_COOKIE=false`
 
@@ -231,6 +247,9 @@ http://39.108.106.95/admin/
 - 旧 IP 入口仍能正常登录
 - `/admin/` 静态资源加载正常
 - `/admin-api/health` 返回成功
+- 任一项目“日报”标签页能正常加载设置、任务和日报列表
+- 手动生成日报后，任务能从 `pending/running` 进入 `completed`
+- 日报详情能查看正文、结构化 JSON 和模型信息
 
 ## 10. 当前阶段的建议
 
@@ -251,3 +270,8 @@ CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com
 如果服务器上已经部署过旧版管理端，请直接参考：
 
 - [upgrade-existing-deployment.md](/D:/lobe-hub2/lobehub-admin-module/docs/upgrade-existing-deployment.md)
+## 12. 2026-03-21 补充
+
+- 当前已验证服务器上的主站 `lobehub` 运行口径，应使用修正后的 `/home/admin/lobehub/docker-compose.yml`。
+- 当前主站 provider 方向已切到 `VOLCENGINE_*`。
+- `NEWAPI_*` 不再作为本次线上部署路径下的主站运行配置。
