@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: 'index.html',
           databaseViewer: 'database-viewer.html',
+          mobile: 'mobile/index.html',
         },
       },
     },

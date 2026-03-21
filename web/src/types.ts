@@ -214,6 +214,49 @@ export type ProjectReportResult = {
     totalPages: number;
   };
 };
+
+export type MobileProjectAttentionMember = {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  role: 'admin' | 'member';
+  managedStatus: 'provisioned' | 'failed' | 'skipped' | 'unconfigured';
+  updatedAt: string | null;
+};
+
+export type MobileProjectSummaryResult = {
+  members: {
+    totalMembers: number;
+    adminCount: number;
+    memberCount: number;
+    pendingMemberCount: number;
+    failedMemberCount: number;
+    attentionMembers: MobileProjectAttentionMember[];
+  } | null;
+  provision: {
+    template: ProjectTemplate | null;
+    latestJob: ProjectReportJob | null;
+  } | null;
+  topics: {
+    range: {
+      rangePreset: 'today';
+      dateFrom: string;
+      dateTo: string;
+    };
+    summary: {
+      managedSessionCount: number;
+      activeMemberCount: number;
+      totalTopics: number;
+      lastTopicAt: string | null;
+    };
+    rows: ProjectTopicStatsRow[];
+  };
+  daily: {
+    latestReport: ProjectDailyReportListItem | null;
+    runningJob: DailyReportJob | null;
+  } | null;
+};
+
 export type ProjectTopicStatsRangePreset = 'today' | 'last3days' | 'last7days' | 'last30days' | 'custom';
 
 export type ProjectTopicStatsFilters = {

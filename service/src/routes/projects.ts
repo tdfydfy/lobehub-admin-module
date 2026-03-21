@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
-import { enqueueProvisionJob, scheduleProvisionJob } from '../provision-jobs.js';
+import { enqueueProvisionJob, enqueueProvisionJobForUsers, scheduleProvisionJob } from '../provision-jobs.js';
 
 type ManagedAssistantStatus = 'provisioned' | 'failed' | 'skipped' | null;
 const EXCLUDED_AGENT_SLUGS = ['inbox', 'page-agent', 'agent-builder', 'group-agent-builder'];
@@ -994,6 +994,58 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  app.post('/api/projects/:projectId/members/:userId/provision', async (request, reply) => {
+    const actor = await requireActor(request);
+    const params = z
+      .object({
+        projectId: z.string().min(1),
+        userId: z.string().min(1),
+      })
+      .parse(request.params);
+    const body = runProvisionSchema.parse(request.body ?? {});
+
+    await ensureProjectAdmin(actor.id, params.projectId);
+
+    const memberResult = await query<{ role: 'admin' | 'member' }>(
+      `
+      select role
+      from lobehub_admin.project_members
+      where project_id = $1
+        and user_id = $2
+      limit 1
+      `,
+      [params.projectId, params.userId],
+    );
+
+    const member = memberResult.rows[0];
+
+    if (!member) {
+      return reply.code(404).send({ message: 'Member not found' });
+    }
+
+    if (member.role !== 'member') {
+      throw memberMutationError('只能为项目成员执行助手重试配置');
+    }
+
+    const jobId = await enqueueProvisionJobForUsers(
+      params.projectId,
+      'refresh',
+      actor.id,
+      body.setDefaultAgent,
+      [params.userId],
+    );
+
+    if (!jobId) {
+      throw new Error('Failed to create provision job');
+    }
+
+    scheduleProvisionJob(jobId, app.log);
+
+    return reply.code(202).send({
+      jobId,
+    });
   });
 
   app.get('/api/projects/:projectId/template', async (request) => {

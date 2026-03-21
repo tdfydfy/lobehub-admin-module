@@ -6,6 +6,7 @@
   JobDetail,
   JobItem,
   DailyReportJob,
+  MobileProjectSummaryResult,
   ProjectMember,
   ProjectMemberAssistantDetail,
   ProjectDailyReportDetailResult,
@@ -166,6 +167,11 @@ export const api = {
       actorId,
     }),
 
+  getMobileProjectSummary: async (actorId: string, projectId: string) =>
+    request<MobileProjectSummaryResult>(`/api/projects/${projectId}/mobile-summary`, {
+      actorId,
+    }),
+
   getMembers: async (actorId: string, projectId: string) =>
     request<{ admins: ProjectMember[]; members: ProjectMember[] }>(`/api/projects/${projectId}/members`, {
       actorId,
@@ -209,6 +215,13 @@ export const api = {
     request<void>(`/api/projects/${projectId}/members/${userId}`, {
       method: 'DELETE',
       actorId,
+    }),
+
+  retryProjectMemberProvision: async (actorId: string, projectId: string, userId: string, setDefaultAgent = false) =>
+    request<{ jobId: string }>(`/api/projects/${projectId}/members/${userId}/provision`, {
+      method: 'POST',
+      actorId,
+      body: { setDefaultAgent },
     }),
 
   getTemplate: async (actorId: string, projectId: string) =>

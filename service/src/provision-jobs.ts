@@ -69,11 +69,12 @@ function resolveFinalJobStatus(total: number, success: number, failed: number, s
 
 const scheduledProvisionJobs = new Set<string>();
 
-export async function enqueueProvisionJob(
+async function createProvisionJob(
   projectId: string,
   jobType: ProvisionJobType,
   createdBy: string,
   setDefaultAgent: boolean,
+  targetUserIds?: string[],
 ) {
   const activeJobResult = await query<ExistingProvisionJobRow>(
     `
@@ -112,18 +113,35 @@ export async function enqueueProvisionJob(
     throw withStatus('Project template is not configured', 409);
   }
 
-  const membersResult = await query<ProjectMemberRow>(
-    `
-    select pm.user_id
-    from lobehub_admin.project_members pm
-    where pm.project_id = $1
-      and pm.role = 'member'
-    order by pm.joined_at asc
-    `,
-    [projectId],
-  );
+  const membersResult = targetUserIds && targetUserIds.length > 0
+    ? await query<ProjectMemberRow>(
+      `
+      select pm.user_id
+      from lobehub_admin.project_members pm
+      where pm.project_id = $1
+        and pm.role = 'member'
+        and pm.user_id = any($2::text[])
+      order by pm.joined_at asc
+      `,
+      [projectId, targetUserIds],
+    )
+    : await query<ProjectMemberRow>(
+      `
+      select pm.user_id
+      from lobehub_admin.project_members pm
+      where pm.project_id = $1
+        and pm.role = 'member'
+      order by pm.joined_at asc
+      `,
+      [projectId],
+    );
 
   const memberIds = membersResult.rows.map((row) => row.user_id);
+
+  if (targetUserIds && targetUserIds.length > 0 && memberIds.length === 0) {
+    throw withStatus('No target members found for provision job', 404);
+  }
+
   const jobResult = await query<{ id: string }>(
     `
     insert into lobehub_admin.provision_jobs (
@@ -167,6 +185,25 @@ export async function enqueueProvisionJob(
   }
 
   return jobId;
+}
+
+export async function enqueueProvisionJob(
+  projectId: string,
+  jobType: ProvisionJobType,
+  createdBy: string,
+  setDefaultAgent: boolean,
+) {
+  return createProvisionJob(projectId, jobType, createdBy, setDefaultAgent);
+}
+
+export async function enqueueProvisionJobForUsers(
+  projectId: string,
+  jobType: ProvisionJobType,
+  createdBy: string,
+  setDefaultAgent: boolean,
+  targetUserIds: string[],
+) {
+  return createProvisionJob(projectId, jobType, createdBy, setDefaultAgent, targetUserIds);
 }
 
 async function markProvisionJobFailed(jobId: string, errorMessage: string) {

@@ -6,6 +6,7 @@ import { corsOrigins, env } from './config.js';
 import { registerDailyReportRoutes } from './routes/daily-reports.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerMobileRoutes } from './routes/mobile.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerSystemRoutes } from './routes/system.js';
@@ -76,6 +77,7 @@ export async function buildApp() {
   await registerProjectRoutes(app);
   await registerReportRoutes(app);
   await registerDailyReportRoutes(app);
+  await registerMobileRoutes(app);
 
   return app;
 }
