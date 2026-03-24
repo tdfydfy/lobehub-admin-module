@@ -253,6 +253,11 @@ function readNumber(record: Record<string, unknown> | null, key: string) {
   return typeof value === 'number' ? value : 0;
 }
 
+function readStringArray(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 function getPrimaryAssistant(member: ProjectMember): ProjectMemberAssistant | null {
   return member.assistants.find((assistant) => assistant.isProjectManaged)
     ?? member.assistants[0]
@@ -263,6 +268,8 @@ function getDailyOverview(detail: ProjectDailyReportDetail | null) {
   const summary = asObject(detail?.summaryJson);
   const overview = asObject(summary?.overview);
   const stats = asObject(summary?.stats);
+  const rawKeyCustomers = asObjectArray(summary?.keyCustomerGroups);
+  const rawMissingCustomers = asObjectArray(summary?.missingInfoCustomers);
 
   return {
     summary,
@@ -271,10 +278,118 @@ function getDailyOverview(detail: ProjectDailyReportDetail | null) {
     headline: readString(overview, 'headline') || '暂无标题',
     executiveSummary: readString(overview, 'executiveSummary') || detail?.summaryMarkdown || '暂无摘要',
     highlights: asObjectArray(summary?.highlights),
-    keyCustomerGroups: asObjectArray(summary?.keyCustomerGroups),
+    keyCustomerGroups: rawKeyCustomers,
+    missingInfoCustomers: rawMissingCustomers,
     managementFocus: asObjectArray(summary?.managementFocus),
     managementActions: asObjectArray(summary?.managementActions),
   };
+}
+
+function getIntentBand(item: Record<string, unknown>) {
+  const intentBand = readString(item, 'intentBand');
+  const intentGrade = readString(item, 'intentGrade');
+
+  if (intentBand === 'A' || intentBand === 'B' || intentBand === 'C' || intentBand === 'D') return intentBand;
+  if (intentGrade.startsWith('A')) return 'A';
+  if (intentGrade.startsWith('B')) return 'B';
+  if (intentGrade.startsWith('C')) return 'C';
+  if (intentGrade.startsWith('D')) return 'D';
+  return '';
+}
+
+function getIntentGradeLabel(item: Record<string, unknown>) {
+  const rawGrade = readString(item, 'intentGrade');
+  const intentBand = getIntentBand(item);
+
+  if (rawGrade) return rawGrade.slice(0, 2);
+  if (intentBand) return intentBand;
+  return '待补';
+}
+
+function normalizeDailyStats(detail: ProjectDailyReportDetail | null, overview: ReturnType<typeof getDailyOverview>) {
+  const stats = overview.stats;
+  const aCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'A').length;
+  const bCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'B').length;
+  const cCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'C').length;
+  const dCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'D').length;
+  const highIntentCount = aCount + bCount;
+  const lowMediumIntentCount = cCount + dCount;
+  const visitedCount = readNumber(stats, 'visitedGroupCount') || detail?.visitedCustomerCount || overview.keyCustomerGroups.length;
+  const derivedMissingCount = Math.max(visitedCount - highIntentCount - lowMediumIntentCount, 0);
+  const missingCount = Math.max(overview.missingInfoCustomers.length, derivedMissingCount);
+
+  return {
+    visitedCount,
+    aCount,
+    bCount,
+    cCount,
+    dCount,
+    highIntentCount,
+    lowMediumIntentCount,
+    missingCount,
+  };
+}
+
+function buildOverviewLead(executiveSummary: string) {
+  return executiveSummary
+    .split(/(?<=[。！？])/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !item.includes('最值得关注的客户') && !item.includes('管理动作') && !item.includes('管理问题与动作'))
+    .join('');
+}
+
+function buildMobileDailyHeadline(normalizedStats: ReturnType<typeof normalizeDailyStats>) {
+  return '今日来访 ' + normalizedStats.visitedCount + ' 组，中高意向 ' + normalizedStats.highIntentCount + ' 组，中低意向 ' + normalizedStats.lowMediumIntentCount + ' 组，待补信息 ' + normalizedStats.missingCount + ' 组';
+}
+
+function formatPriorityLabel(priority: string) {
+  switch (priority) {
+    case 'high': return '高优先级';
+    case 'medium': return '中优先级';
+    case 'low': return '低优先级';
+    default: return '待处理';
+  }
+}
+
+function getPriorityClass(priority: string) {
+  switch (priority) {
+    case 'high': return 'danger';
+    case 'medium': return 'active';
+    default: return '';
+  }
+}
+
+function getManagementProblem(action: Record<string, unknown>) {
+  const actionType = readString(action, 'actionType');
+  const reason = readString(action, 'reason');
+
+  switch (actionType) {
+    case 'inventory_release':
+      return '可售房源与楼层口径不足。' + reason;
+    case 'pricing_policy':
+      return '客户预算与项目价格存在明显错配。' + reason;
+    case 'sales_collateral':
+      return '客户关注点缺少统一对比资料和销售道具支撑。' + reason;
+    case 'revisit_campaign':
+      return '客户停留在复访或决策推进环节，缺少统一推进抓手。' + reason;
+    case 'channel_expansion':
+      return '有效来访偏少，需要补强渠道触达。' + reason;
+    case 'broker_incentive':
+      return '渠道与中介联动支持不足。' + reason;
+    default:
+      return reason || '当前存在需要项目端处理的问题。';
+  }
+}
+
+function buildManagementPairs(actionItems: Array<Record<string, unknown>>) {
+  return actionItems.map((action) => ({
+    problem: getManagementProblem(action),
+    actionTitle: readString(action, 'title'),
+    actionDetail: readString(action, 'detail'),
+    topicCount: readStringArray(action, 'relatedTopicIds').length,
+    priority: readString(action, 'priority'),
+  }));
 }
 
 function Sheet({
@@ -440,13 +555,21 @@ function SummaryCard({
   value,
   meta,
   onClick,
+  stacked = false,
 }: {
   label: string;
   value: string | number;
   meta: string;
   onClick?: () => void;
+  stacked?: boolean;
 }) {
-  const content = (
+  const content = stacked ? (
+    <>
+      <span className="mobile-stat-label">{label}</span>
+      <strong className="mobile-stat-value stacked">{value}</strong>
+      <small className="mobile-stat-meta">{meta}</small>
+    </>
+  ) : (
     <>
       <span className="mobile-stat-label">{label}</span>
       <strong className="mobile-stat-value">{value}</strong>
@@ -681,12 +804,14 @@ function MobileOverviewPage({
   project,
   projectRole,
   onOpenPage,
+  onOpenDailyDetail,
   onFeedback,
 }: {
   actorId: string;
   project: NormalizedProject;
   projectRole: 'system_admin' | 'admin' | 'member';
   onOpenPage: (page: MobilePage) => void;
+  onOpenDailyDetail: (reportId: string) => void;
   onFeedback: (message: string, tone?: FeedbackTone) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -750,7 +875,7 @@ function MobileOverviewPage({
 
       {projectRole !== 'member' ? (
         <>
-          <div className="mobile-grid">
+          <div className="mobile-grid overview-summary-grid">
             <SummaryCard
               label="成员"
               value={memberSummary?.totalMembers ?? 0}
@@ -808,11 +933,13 @@ function MobileOverviewPage({
               </button>
             </div>
             {latestDailyReport ? (
-              <div className="mobile-stack">
+              <button type="button" className="mobile-list-button" onClick={() => onOpenDailyDetail(latestDailyReport.reportId)}>
+                <div className="mobile-stack">
                 <strong>{latestDailyReport.businessDate}</strong>
                 <p className="mobile-muted">来访 {latestDailyReport.visitedCustomerCount} / topic {latestDailyReport.activeTopicCount} / 模型 {latestDailyReport.modelName}</p>
                 <p className="mobile-muted">生成于 {formatTime(latestDailyReport.generatedAt)}</p>
-              </div>
+                </div>
+              </button>
             ) : (
               <p className="mobile-muted">当前还没有生成日报。</p>
             )}
@@ -880,7 +1007,7 @@ function MobileOverviewPage({
         </>
       ) : (
         <>
-          <div className="mobile-grid">
+          <div className="mobile-grid overview-summary-grid">
             <SummaryCard
               label="我的对话"
               value={topicSummary?.summary.totalTopics ?? 0}
@@ -1624,7 +1751,7 @@ function MobileTopicsPage({
 
       {report ? (
         <>
-          <div className="mobile-grid">
+          <div className="mobile-grid topic-summary-grid">
             <SummaryCard label="活跃成员" value={report.summary.activeMemberCount} meta={`总成员 ${report.summary.totalMembers}`} />
             <SummaryCard label="Topic" value={report.summary.totalTopics} meta={`最近活跃 ${formatTime(report.summary.lastTopicAt)}`} />
           </div>
@@ -2104,11 +2231,13 @@ function MobileDailyDetailPage({
   actorId,
   projectId,
   reportId,
+  onOpenTopic,
   onFeedback,
 }: {
   actorId: string;
   projectId: string;
   reportId: string | null;
+  onOpenTopic: (topicId: string, source?: 'topics' | 'daily') => void;
   onFeedback: (message: string, tone?: FeedbackTone) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -2142,6 +2271,10 @@ function MobileDailyDetailPage({
   }, [actorId, onFeedback, projectId, reportId]);
 
   const overview = getDailyOverview(detail);
+  const normalizedStats = normalizeDailyStats(detail, overview);
+  const managementPairs = buildManagementPairs(overview.managementActions);
+  const overviewLead = buildOverviewLead(overview.executiveSummary);
+  const displayHeadline = buildMobileDailyHeadline(normalizedStats);
 
   return (
     <div className="mobile-page">
@@ -2151,87 +2284,81 @@ function MobileDailyDetailPage({
         <>
           <div className="mobile-card">
             <p className="mobile-eyebrow">Overview</p>
-            <h2>{overview.headline}</h2>
-            <p>{overview.executiveSummary}</p>
-            <div className="mobile-chip-row">
-              <span className="mobile-chip active">营业日 {detail.businessDate}</span>
-              <span className="mobile-chip">窗口 {formatTime(detail.windowStartAt)} ~ {formatTime(detail.windowEndAt)}</span>
-            </div>
-          </div>
-
-          <div className="mobile-grid">
-            <SummaryCard label="来访组数" value={readNumber(overview.stats, 'visitedGroupCount') || detail.visitedCustomerCount} meta={`营业日 ${detail.businessDate}`} />
-            <SummaryCard label="高意向" value={readNumber(overview.stats, 'highIntentGroupCount')} meta={`高风险 ${readNumber(overview.stats, 'highRiskGroupCount')}`} />
-            <SummaryCard label="活跃 topic" value={detail.activeTopicCount} meta={`总消息 ${detail.totalMessageCount}`} />
-            <SummaryCard label="模型" value={detail.modelName} meta={detail.modelProvider} />
-          </div>
-
-          {overview.highlights.length > 0 ? (
-            <div className="mobile-card">
-              <p className="mobile-eyebrow">Highlights</p>
-              <h3>今日重点</h3>
-              <div className="mobile-stack">
-                {overview.highlights.map((item, index) => (
-                  <div key={`${readString(item, 'title')}-${index}`} className="mobile-inline-card">
-                    <div>
-                      <strong>{readString(item, 'title')}</strong>
-                      <p>{readString(item, 'detail')}</p>
-                    </div>
-                  </div>
-                ))}
+            <h2>{displayHeadline}</h2>
+            <p>{overviewLead || overview.executiveSummary}</p>
+            {overview.keyCustomerGroups.length > 0 ? (
+              <div className="mobile-overview-block">
+                <strong>最值得关注的客户</strong>
+                <div className="mobile-overview-list">
+                  {overview.keyCustomerGroups.slice(0, 4).map((item) => (
+                    <span key={'overview-key-' + (readString(item, 'topicId') || readString(item, 'title'))}>{readString(item, 'title')}</span>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+            {managementPairs.length > 0 ? (
+              <div className="mobile-overview-block">
+                <strong>管理动作</strong>
+                <div className="mobile-overview-list">
+                  {managementPairs.slice(0, 3).map((item, index) => (
+                    <span key={'overview-action-' + item.actionTitle + '-' + index}>{item.actionTitle}</span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mobile-grid daily-summary-grid">
+            <SummaryCard label="今日来访" value={normalizedStats.visitedCount} meta="" stacked />
+            <SummaryCard label={'中高意向'} value={normalizedStats.highIntentCount} meta={'A类 ' + normalizedStats.aCount + '\n' + 'B类 ' + normalizedStats.bCount} stacked />
+            <SummaryCard label={'中低意向'} value={normalizedStats.lowMediumIntentCount} meta={'C类 ' + normalizedStats.cCount + '\n' + 'D类 ' + normalizedStats.dCount} stacked />
+            <SummaryCard label="待补信息" value={normalizedStats.missingCount} meta="" stacked />
+          </div>
 
           {overview.keyCustomerGroups.length > 0 ? (
             <div className="mobile-card">
-              <p className="mobile-eyebrow">Groups</p>
-              <h3>重点客户组</h3>
+              <p className="mobile-eyebrow">Priority</p>
+              <h3>今日重点客户</h3>
               <div className="mobile-stack">
-                {overview.keyCustomerGroups.slice(0, 5).map((item, index) => (
-                  <div key={`${readString(item, 'title')}-${index}`} className="mobile-inline-card">
-                    <div>
-                      <strong>{readString(item, 'title')}</strong>
+                {overview.keyCustomerGroups.map((item, index) => (
+                  <button
+                    key={readString(item, 'title') + '-' + index}
+                    type="button"
+                    className="mobile-list-button mobile-daily-customer-card"
+                    onClick={() => onOpenTopic(readString(item, 'topicId'), 'daily')}
+                  >
+                    <div className="mobile-daily-customer-body">
+                      <div className="mobile-customer-head">
+                        <div>
+                          <strong>{readString(item, 'title')}</strong>
+                          <p className="mobile-card-subtitle">销售：{readString(item, 'ownerDisplayName') || '未识别销售员'}</p>
+                        </div>
+                        <span className={'mobile-chip mobile-intent-chip ' + (getIntentGradeLabel(item) === '待补' ? 'warning' : 'active')}>{getIntentGradeLabel(item)}</span>
+                      </div>
                       <p>{readString(item, 'overallSummary')}</p>
-                      <p className="mobile-muted">{readString(item, 'managementNeed')}</p>
+                      {getIntentGradeLabel(item) === '待补' && readString(item, 'initialCustomerMessage') ? <p className="mobile-muted">初始描述：{readString(item, 'initialCustomerMessage')}</p> : null}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           ) : null}
 
-          {overview.managementFocus.length > 0 ? (
+          {managementPairs.length > 0 ? (
             <div className="mobile-card">
-              <p className="mobile-eyebrow">Focus</p>
-              <h3>管理关注点</h3>
+              <p className="mobile-eyebrow">Management</p>
+              <h3>管理问题与动作</h3>
               <div className="mobile-stack">
-                {overview.managementFocus.slice(0, 5).map((item, index) => (
-                  <div key={`${readString(item, 'title')}-${index}`} className="mobile-inline-card">
-                    <div>
-                      <strong>{readString(item, 'title')}</strong>
-                      <p>{readString(item, 'detail')}</p>
+                {managementPairs.slice(0, 5).map((item, index) => (
+                  <div key={item.actionTitle + '-' + index} className="mobile-inline-card mobile-management-card">
+                    <div className="mobile-management-main">
+                      <strong>问题：{item.problem}</strong>
+                      <p className="mobile-management-action-title">动作：{item.actionTitle}</p>
+                      <p>{item.actionDetail}</p>
                     </div>
-                    <div className="mobile-list-meta">
-                      <span>{readString(item, 'severity')}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {overview.managementActions.length > 0 ? (
-            <div className="mobile-card">
-              <p className="mobile-eyebrow">Actions</p>
-              <h3>建议动作</h3>
-              <div className="mobile-stack">
-                {overview.managementActions.slice(0, 5).map((item, index) => (
-                  <div key={`${readString(item, 'title')}-${index}`} className="mobile-inline-card">
-                    <div>
-                      <strong>{readString(item, 'title')}</strong>
-                      <p>{readString(item, 'detail')}</p>
-                      <p className="mobile-muted">{readString(item, 'reason')}</p>
+                    <div className="mobile-chip-row mobile-management-chips">
+                      <span className={'mobile-chip ' + getPriorityClass(item.priority)}>{formatPriorityLabel(item.priority)}</span>
+                      {item.topicCount > 0 ? <span className="mobile-chip">{item.topicCount}?</span> : null}
                     </div>
                   </div>
                 ))}
@@ -2334,6 +2461,7 @@ export default function AppMobile() {
   const [topicFilters, setTopicFilters] = useState<TopicFilterState>(createDefaultTopicFilters());
   const [selectedTopicSelection, setSelectedTopicSelection] = useState<TopicSelection | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedTopicSource, setSelectedTopicSource] = useState<'topics' | 'daily'>('topics');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
@@ -2395,6 +2523,7 @@ export default function AppMobile() {
         setTopicFilters(createDefaultTopicFilters());
         setSelectedTopicSelection(null);
         setSelectedTopicId(null);
+        setSelectedTopicSource('topics');
         setSelectedReportId(null);
       }
       showFeedback(`已进入项目工作台：${contextResult.actor.displayName}`, 'success');
@@ -2508,7 +2637,7 @@ export default function AppMobile() {
 
   function handleGoBack() {
     if (currentPage === 'topicDetail') {
-      setCurrentPage('topicList');
+      setCurrentPage(selectedTopicSource === 'daily' ? 'dailyDetail' : 'topicList');
       return;
     }
 
@@ -2574,11 +2703,13 @@ export default function AppMobile() {
 
   function openTopicMember(selection: TopicSelection) {
     setSelectedTopicSelection(selection);
+    setSelectedTopicSource('topics');
     setCurrentPage('topicList');
   }
 
-  function openTopicDetail(topicId: string) {
+  function openTopicDetail(topicId: string, source: 'topics' | 'daily' = 'topics') {
     setSelectedTopicId(topicId);
+    setSelectedTopicSource(source);
     setCurrentPage('topicDetail');
   }
 
@@ -2593,6 +2724,7 @@ export default function AppMobile() {
     setTopicFilters(createDefaultTopicFilters());
     setSelectedTopicSelection(null);
     setSelectedTopicId(null);
+    setSelectedTopicSource('topics');
     setSelectedReportId(null);
     setTaskRefreshKey((current) => current + 1);
   }
@@ -2701,6 +2833,7 @@ export default function AppMobile() {
             project={currentProject}
             projectRole={currentProjectRole ?? 'member'}
             onOpenPage={setCurrentPage}
+            onOpenDailyDetail={openDailyDetail}
             onFeedback={showFeedback}
           />
         ) : null}
@@ -2770,6 +2903,7 @@ export default function AppMobile() {
             actorId={actorId}
             projectId={currentProject.id}
             reportId={selectedReportId}
+            onOpenTopic={openTopicDetail}
             onFeedback={showFeedback}
           />
         ) : null}

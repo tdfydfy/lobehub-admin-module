@@ -209,6 +209,16 @@ button {
   gap: 12px;
 }
 
+.mobile-grid.daily-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-grid.overview-summary-grid,
+.mobile-grid.topic-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .mobile-grid.single {
   grid-template-columns: 1fr;
 }
@@ -216,13 +226,24 @@ button {
 .mobile-stat-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   text-align: left;
+  padding: 14px 12px;
+  border-radius: 20px;
+  min-width: 0;
 }
 
 .mobile-stat-card.button {
   width: 100%;
   border: 1px solid var(--mobile-line);
+}
+
+.mobile-stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .mobile-stat-label,
@@ -236,11 +257,24 @@ button {
 .mobile-stat-label,
 .mobile-stat-meta {
   display: block;
+  white-space: pre-line;
 }
 
 .mobile-stat-value {
-  font-size: 22px;
+  font-size: 16px;
   line-height: 1.1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-grid.daily-summary-grid .mobile-stat-label {
+  font-size: 11px;
+}
+
+.mobile-grid.daily-summary-grid .mobile-stat-meta {
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .mobile-button {
@@ -339,6 +373,49 @@ button {
   padding: 16px;
 }
 
+.mobile-daily-customer-card {
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.mobile-daily-customer-body {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mobile-customer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.mobile-card-subtitle {
+  margin: 2px 0 0;
+  color: var(--mobile-muted);
+  font-size: 13px;
+}
+
+.mobile-intent-chip {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--mobile-accent), var(--mobile-accent-strong));
+  border-color: transparent;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.mobile-intent-chip.warning {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--mobile-warning), #9b5d00);
+}
+
 .mobile-list-button.active {
   border-color: rgba(15, 118, 110, 0.28);
   background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.92));
@@ -356,6 +433,35 @@ button {
   margin-bottom: 4px;
 }
 
+.mobile-customer-head > div {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.mobile-customer-head strong {
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-daily-customer-body > p,
+.mobile-daily-customer-body .mobile-muted {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.mobile-daily-customer-body > p {
+  -webkit-line-clamp: 3;
+}
+
+.mobile-daily-customer-body .mobile-muted {
+  -webkit-line-clamp: 2;
+}
+
 .mobile-list-button p,
 .mobile-inline-card p {
   margin: 0;
@@ -367,6 +473,47 @@ button {
   gap: 6px;
   font-size: 13px;
   text-align: right;
+}
+
+.mobile-management-card {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.mobile-management-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-management-action-title {
+  color: var(--mobile-accent-strong);
+  font-weight: 700;
+}
+
+.mobile-management-chips {
+  width: 100%;
+}
+
+.mobile-overview-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.mobile-overview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--mobile-muted);
+}
+
+.mobile-chip.danger {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--mobile-danger), #921d14);
+  border-color: transparent;
 }
 
 .mobile-field {
@@ -525,6 +672,32 @@ button {
 @media (max-width: 420px) {
   .mobile-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-grid.daily-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .mobile-grid.overview-summary-grid,
+  .mobile-grid.topic-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mobile-stat-card {
+    padding: 12px 10px;
+  }
+
+  .mobile-stat-label {
+    font-size: 10px;
+  }
+
+  .mobile-stat-value {
+    font-size: 15px;
+  }
+
+  .mobile-stat-meta {
+    font-size: 10px;
+    line-height: 1.35;
   }
 
   .mobile-bottom-nav {

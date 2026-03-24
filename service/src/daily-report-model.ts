@@ -23,21 +23,33 @@ type PromptInputStats = {
   truncatedMessageCount: number;
 };
 
+type IntentBand = 'A' | 'B' | 'C' | 'D';
+
+type TopicIntentInsight = {
+  topicId: string;
+  intentBand: IntentBand | null;
+  intentGrade: string | null;
+  summary: string | null;
+};
+
 type TopicGroupDigest = {
   groupId: string;
   topicId: string;
   title: string;
   ownerDisplayName: string;
   ownerEmail: string | null;
+  intentBand: IntentBand | null;
+  intentGrade: string | null;
   firstMessageAt: string;
   lastMessageAt: string;
   totalMessageCount: number;
   userMessageCount: number;
   assistantMessageCount: number;
   stage: 'inquiry' | 'evaluating' | 'negotiating' | 'blocked' | 'support';
-  intentLevel: 'high' | 'medium' | 'low';
+  intentLevel: 'high' | 'medium' | 'low' | 'unknown';
   riskLevel: 'high' | 'medium' | 'low';
   overallSummary: string;
+  initialCustomerMessage: string | null;
   mainConcerns: string[];
   managementNeed: string;
   recommendedAction: string;
@@ -73,6 +85,58 @@ function dedupeStrings(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function isIntentBand(value: unknown): value is IntentBand {
+  return value === 'A' || value === 'B' || value === 'C' || value === 'D';
+}
+
+function parseIntentExtractionResult(text: string) {
+  const trimmed = text.trim();
+  const fenced = trimmed
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  const jsonStart = fenced.indexOf('{');
+  const jsonEnd = fenced.lastIndexOf('}');
+
+  if (jsonStart < 0 || jsonEnd < jsonStart) {
+    throw new Error('Intent extraction did not return valid JSON object');
+  }
+
+  const parsed = JSON.parse(fenced.slice(jsonStart, jsonEnd + 1)) as { groups?: unknown };
+
+  if (!Array.isArray(parsed.groups)) {
+    throw new Error('Intent extraction JSON is missing groups array');
+  }
+
+  return parsed.groups.map((item) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error('Intent extraction group item is invalid');
+    }
+
+    const record = item as Record<string, unknown>;
+    const topicId = typeof record.topicId === 'string' ? record.topicId.trim() : '';
+    const intentBand = isIntentBand(record.intentBand) ? record.intentBand : null;
+    const intentGrade = typeof record.intentGrade === 'string' && record.intentGrade.trim()
+      ? record.intentGrade.trim().slice(0, 20)
+      : null;
+    const summary = typeof record.summary === 'string' && record.summary.trim()
+      ? truncateText(record.summary, 280)
+      : null;
+
+    if (!topicId) {
+      throw new Error('Intent extraction group item is missing topicId');
+    }
+
+    return {
+      topicId,
+      intentBand,
+      intentGrade,
+      summary,
+    } satisfies TopicIntentInsight;
+  });
+}
+
 function resolveModelConfig(snapshot: DailyReportExecutionSnapshot): ResolvedModelConfig {
   if (snapshot.modelProvider === 'volcengine') {
     return {
@@ -101,18 +165,11 @@ function pickStage(texts: string[]): TopicGroupDigest['stage'] {
   return 'inquiry';
 }
 
-function pickIntentLevel(userMessageCount: number, texts: string[]): TopicGroupDigest['intentLevel'] {
-  const joined = texts.join('\n');
-
-  if (/报价|预算|合同|认筹|定金|交付|加推|新楼栋|楼层/.test(joined) || userMessageCount >= 4) {
-    return 'high';
-  }
-
-  if (/学区|配套|户型|房源|优惠|竞品|复访/.test(joined) || userMessageCount >= 2) {
-    return 'medium';
-  }
-
-  return 'low';
+function resolveIntentLevel(intentBand: IntentBand | null): TopicGroupDigest['intentLevel'] {
+  if (intentBand === 'A' || intentBand === 'B') return 'high';
+  if (intentBand === 'C') return 'medium';
+  if (intentBand === 'D') return 'low';
+  return 'unknown';
 }
 
 function pickRiskLevel(texts: string[]): TopicGroupDigest['riskLevel'] {
@@ -147,6 +204,32 @@ function pickActionType(concerns: string[], stage: TopicGroupDigest['stage'], in
   if (concerns.includes('渠道拓客')) return 'broker_incentive';
   if (intentLevel === 'low' && riskLevel === 'low') return 'channel_expansion';
   return 'sales_collateral';
+}
+
+function getInitialCustomerMessage(topic: DailyReportSourceTopic) {
+  const firstUserMessage = topic.messages.find((message) => message.role === 'user')?.content ?? '';
+  return firstUserMessage ? truncateText(firstUserMessage, 220) : null;
+}
+
+function buildMissingInfoSummary(topic: DailyReportSourceTopic) {
+  const initialCustomerMessage = getInitialCustomerMessage(topic);
+
+  if (initialCustomerMessage) {
+    return truncateText(
+      `当前客户描述为“${initialCustomerMessage}”，但对话分析结果里没有明确给出 A/B/C/D 意向等级，建议补充预算、决策人和房源匹配等关键信息后再分析。`,
+      220,
+    );
+  }
+
+  return '当前未从对话分析结果中识别出明确的 A/B/C/D 意向等级，建议补充客户预算、决策人和房源匹配等关键信息后再分析。';
+}
+
+function describeMissingInfoNeed() {
+  return '需要销售补齐客户预算、决策人到场情况、核心购房诉求和房源匹配情况';
+}
+
+function describeMissingInfoAction() {
+  return '补充客户关键信息后重新发起分析，优先确认预算、决策人和核心诉求';
 }
 
 function describeManagementNeed(actionType: TopicGroupDigest['actionType'], concerns: string[]) {
@@ -192,22 +275,31 @@ function getLastUserMessages(topic: DailyReportSourceTopic) {
     .map((message) => truncateText(message.content, 180));
 }
 
-function buildTopicGroupDigest(owner: DailyReportSourceCustomer, topic: DailyReportSourceTopic): TopicGroupDigest {
+function buildTopicGroupDigest(
+  owner: DailyReportSourceCustomer,
+  topic: DailyReportSourceTopic,
+  insightByTopicId: Map<string, TopicIntentInsight>,
+): TopicGroupDigest {
   const userMessages = topic.messages.filter((message) => message.role === 'user');
   const assistantMessages = topic.messages.filter((message) => message.role === 'assistant');
   const textSource = userMessages.length > 0 ? userMessages.map((message) => message.content) : topic.messages.map((message) => message.content);
   const concerns = detectConcerns(textSource);
   const stage = pickStage(textSource);
-  const intentLevel = pickIntentLevel(userMessages.length, textSource);
+  const llmInsight = insightByTopicId.get(topic.topicId) ?? null;
+  const intentBand = llmInsight?.intentBand ?? null;
+  const intentGrade = llmInsight?.intentGrade ?? null;
+  const intentLevel = resolveIntentLevel(intentBand);
   const riskLevel = pickRiskLevel(textSource);
   const actionType = pickActionType(concerns, stage, intentLevel, riskLevel);
-  const lastRelevantMessage = userMessages[userMessages.length - 1]?.content
-    ?? topic.messages[topic.messages.length - 1]?.content
-    ?? topic.title;
-  const overallSummary = truncateText(
-    `${topic.title}，客户主要关注${concerns.join('、')}，当前处于${stage}阶段，${intentLevel === 'high' ? '意向较高' : intentLevel === 'medium' ? '处于持续评估' : '仍在浅层咨询'}。`,
-    220,
-  );
+  const initialCustomerMessage = getInitialCustomerMessage(topic);
+  const overallSummary = llmInsight?.summary
+    ? truncateText(llmInsight.summary, 220)
+    : intentBand
+      ? truncateText(
+        `${topic.title}，客户主要关注${concerns.join('、')}，当前处于${stage}阶段，${intentBand === 'A' || intentBand === 'B' ? '属于高意向客户' : intentBand === 'C' ? '仍在持续评估' : '当前成交优先级较低'}。`,
+        220,
+      )
+      : buildMissingInfoSummary(topic);
 
   return {
     groupId: topic.topicId,
@@ -215,6 +307,8 @@ function buildTopicGroupDigest(owner: DailyReportSourceCustomer, topic: DailyRep
     title: topic.title,
     ownerDisplayName: owner.displayName,
     ownerEmail: owner.email,
+    intentBand,
+    intentGrade,
     firstMessageAt: topic.messages[0]?.createdAt ?? topic.createdAt,
     lastMessageAt: topic.messages[topic.messages.length - 1]?.createdAt ?? topic.updatedAt,
     totalMessageCount: topic.messages.length,
@@ -224,9 +318,10 @@ function buildTopicGroupDigest(owner: DailyReportSourceCustomer, topic: DailyRep
     intentLevel,
     riskLevel,
     overallSummary,
+    initialCustomerMessage,
     mainConcerns: concerns,
-    managementNeed: describeManagementNeed(actionType, concerns),
-    recommendedAction: describeRecommendedAction(actionType, concerns),
+    managementNeed: intentBand ? describeManagementNeed(actionType, concerns) : describeMissingInfoNeed(),
+    recommendedAction: intentBand ? describeRecommendedAction(actionType, concerns) : describeMissingInfoAction(),
     actionType,
     evidenceMessageIds: userMessages.slice(-3).map((message) => message.id),
     lastUserMessages: getLastUserMessages(topic),
@@ -234,14 +329,24 @@ function buildTopicGroupDigest(owner: DailyReportSourceCustomer, topic: DailyRep
 }
 
 function getGroupScore(group: TopicGroupDigest) {
-  return (group.intentLevel === 'high' ? 20 : group.intentLevel === 'medium' ? 10 : 0)
+  const intentScore = group.intentBand === 'A'
+    ? 40
+    : group.intentBand === 'B'
+      ? 30
+      : group.intentBand === null
+        ? 18
+        : group.intentBand === 'C'
+          ? 10
+          : 0;
+
+  return intentScore
     + (group.riskLevel === 'high' ? 10 : group.riskLevel === 'medium' ? 5 : 0)
     + group.userMessageCount;
 }
 
-function buildTopicGroups(source: DailyReportSourcePayload) {
+function buildTopicGroups(source: DailyReportSourcePayload, insightByTopicId = new Map<string, TopicIntentInsight>()) {
   return source.customers
-    .flatMap((owner) => owner.topics.map((topic) => buildTopicGroupDigest(owner, topic)))
+    .flatMap((owner) => owner.topics.map((topic) => buildTopicGroupDigest(owner, topic, insightByTopicId)))
     .sort((left, right) =>
       getGroupScore(right) - getGroupScore(left)
       || right.lastMessageAt.localeCompare(left.lastMessageAt));
@@ -272,13 +377,14 @@ function buildCommonConcerns(groups: TopicGroupDigest[]) {
 
 function buildHighlights(groups: TopicGroupDigest[], commonConcerns: ReturnType<typeof buildCommonConcerns>) {
   const highlights: Array<{ title: string; detail: string; relatedTopicIds: string[] }> = [];
-  const highIntentGroups = groups.filter((group) => group.intentLevel === 'high');
+  const highIntentGroups = groups.filter((group) => group.intentBand === 'A' || group.intentBand === 'B');
   const blockedGroups = groups.filter((group) => group.stage === 'blocked' || group.riskLevel === 'high');
+  const missingIntentGroups = groups.filter((group) => group.intentBand === null);
 
   if (highIntentGroups.length > 0) {
     highlights.push({
       title: '今日已有可重点推进的成交机会',
-      detail: `共有 ${highIntentGroups.length} 组客户表现出较强意向，需要管理端给到更明确的推进抓手。`,
+      detail: `共有 ${highIntentGroups.length} 组客户在 AI 分析结果中被识别为 A/B 类，可作为今日重点盘客对象。`,
       relatedTopicIds: highIntentGroups.map((group) => group.topicId),
     });
   }
@@ -299,6 +405,14 @@ function buildHighlights(groups: TopicGroupDigest[], commonConcerns: ReturnType<
     });
   }
 
+  if (missingIntentGroups.length > 0) {
+    highlights.push({
+      title: '部分客户信息不足，暂未形成意向分级',
+      detail: `共有 ${missingIntentGroups.length} 组客户未在 AI 分析结果中输出明确等级，建议补充预算、决策人和房源匹配信息。`,
+      relatedTopicIds: missingIntentGroups.map((group) => group.topicId),
+    });
+  }
+
   if (highlights.length === 0) {
     highlights.push({
       title: '今日来访整体平稳',
@@ -314,6 +428,7 @@ function buildManagementFocus(groups: TopicGroupDigest[], commonConcerns: Return
   const focusItems: Array<{ title: string; severity: 'high' | 'medium' | 'low'; detail: string; relatedTopicIds: string[] }> = [];
   const highRiskGroups = groups.filter((group) => group.riskLevel === 'high');
   const blockedGroups = groups.filter((group) => group.stage === 'blocked');
+  const missingIntentGroups = groups.filter((group) => group.intentBand === null);
 
   if (highRiskGroups.length > 0) {
     focusItems.push({
@@ -330,6 +445,15 @@ function buildManagementFocus(groups: TopicGroupDigest[], commonConcerns: Return
       severity: blockedGroups.length >= 2 ? 'high' : 'medium',
       detail: `共有 ${blockedGroups.length} 组客户停留在“再看看/等决策/决策人不到场”的状态。`,
       relatedTopicIds: blockedGroups.map((group) => group.topicId),
+    });
+  }
+
+  if (missingIntentGroups.length > 0) {
+    focusItems.push({
+      title: '部分客户资料不足，影响意向判定',
+      severity: missingIntentGroups.length >= 3 ? 'high' : 'medium',
+      detail: `共有 ${missingIntentGroups.length} 组客户未输出明确等级，建议一线补齐预算、决策人和核心需求后再分析。`,
+      relatedTopicIds: missingIntentGroups.map((group) => group.topicId),
     });
   }
 
@@ -436,10 +560,11 @@ function buildManagementActions(groups: TopicGroupDigest[], commonConcerns: Retu
 }
 
 function buildOverviewHeadline(groups: TopicGroupDigest[], managementActions: ReturnType<typeof buildManagementActions>) {
-  const highIntentCount = groups.filter((group) => group.intentLevel === 'high').length;
+  const highIntentCount = groups.filter((group) => group.intentBand === 'A' || group.intentBand === 'B').length;
+  const missingIntentCount = groups.filter((group) => group.intentBand === null).length;
   const highRiskCount = groups.filter((group) => group.riskLevel === 'high').length;
 
-  return `今日来访 ${groups.length} 组，高意向 ${highIntentCount} 组，高风险 ${highRiskCount} 组，建议优先推进 ${managementActions.length} 个管理动作`;
+  return `今日来访 ${groups.length} 组，A/B 高意向 ${highIntentCount} 组，信息不足 ${missingIntentCount} 组，高风险 ${highRiskCount} 组`;
 }
 
 function buildExecutiveSummary(groups: TopicGroupDigest[], commonConcerns: ReturnType<typeof buildCommonConcerns>, managementActions: ReturnType<typeof buildManagementActions>) {
@@ -447,22 +572,64 @@ function buildExecutiveSummary(groups: TopicGroupDigest[], commonConcerns: Retur
     return '今日营业时间内暂无有效来访组，暂时无法形成经营判断。';
   }
 
-  const topGroups = groups.slice(0, 3).map((group) => group.title).join('、');
+  const topGroups = groups
+    .filter((group) => group.intentBand === 'A' || group.intentBand === 'B')
+    .slice(0, 3)
+    .map((group) => group.title)
+    .join('、');
   const topConcerns = commonConcerns.slice(0, 3).map((item) => item.label).join('、');
   const topActions = managementActions.slice(0, 2).map((item) => item.title).join('；');
+  const missingIntentCount = groups.filter((group) => group.intentBand === null).length;
 
   return truncateText(
-    `今日共识别 ${groups.length} 组有效来访，对话主要集中在 ${topConcerns || '客户需求澄清'}。当前最值得关注的客户组包括 ${topGroups}。从管理动作看，建议优先处理：${topActions || '持续观察来访变化'}。`,
+    `今日共识别 ${groups.length} 组有效来访，对话主要集中在 ${topConcerns || '客户需求澄清'}。${topGroups ? `当前最值得关注的 A/B 类客户包括 ${topGroups}。` : '今日暂未识别出明确的 A/B 类客户。'}${missingIntentCount > 0 ? `另有 ${missingIntentCount} 组客户因信息不足未形成明确等级。` : ''}从管理动作看，建议优先处理：${topActions || '持续观察来访变化'}。`,
     600,
   );
 }
 
-function buildFallbackSummary(source: DailyReportSourcePayload, modelConfig: ResolvedModelConfig, fallbackReason: string | null): DailyReportSummary {
-  const groups = buildTopicGroups(source);
+function mapGroupToSummaryItem(group: TopicGroupDigest) {
+  return {
+    groupId: group.groupId,
+    topicId: group.topicId,
+    title: group.title,
+    ownerDisplayName: group.ownerDisplayName,
+    ownerEmail: group.ownerEmail,
+    intentBand: group.intentBand,
+    intentGrade: group.intentGrade,
+    firstMessageAt: group.firstMessageAt,
+    lastMessageAt: group.lastMessageAt,
+    totalMessageCount: group.totalMessageCount,
+    userMessageCount: group.userMessageCount,
+    assistantMessageCount: group.assistantMessageCount,
+    stage: group.stage,
+    intentLevel: group.intentLevel,
+    riskLevel: group.riskLevel,
+    overallSummary: group.overallSummary,
+    initialCustomerMessage: group.initialCustomerMessage,
+    mainConcerns: group.mainConcerns,
+    managementNeed: group.managementNeed,
+    recommendedAction: group.recommendedAction,
+    evidenceMessageIds: group.evidenceMessageIds,
+  };
+}
+
+function buildFallbackSummary(
+  source: DailyReportSourcePayload,
+  modelConfig: ResolvedModelConfig,
+  fallbackReason: string | null,
+  insightByTopicId = new Map<string, TopicIntentInsight>(),
+): DailyReportSummary {
+  const groups = buildTopicGroups(source, insightByTopicId);
   const commonConcerns = buildCommonConcerns(groups);
   const managementActions = buildManagementActions(groups, commonConcerns);
   const managementFocus = buildManagementFocus(groups, commonConcerns);
   const highlights = buildHighlights(groups, commonConcerns);
+  const aIntentGroups = groups.filter((group) => group.intentBand === 'A');
+  const bIntentGroups = groups.filter((group) => group.intentBand === 'B');
+  const cIntentGroups = groups.filter((group) => group.intentBand === 'C');
+  const dIntentGroups = groups.filter((group) => group.intentBand === 'D');
+  const highIntentGroups = [...aIntentGroups, ...bIntentGroups];
+  const missingIntentGroups = groups.filter((group) => group.intentBand === null);
 
   return {
     schemaVersion: 2,
@@ -478,9 +645,14 @@ function buildFallbackSummary(source: DailyReportSourcePayload, modelConfig: Res
     },
     stats: {
       visitedGroupCount: groups.length,
-      highIntentGroupCount: groups.filter((group) => group.intentLevel === 'high').length,
-      mediumIntentGroupCount: groups.filter((group) => group.intentLevel === 'medium').length,
-      lowIntentGroupCount: groups.filter((group) => group.intentLevel === 'low').length,
+      aIntentGroupCount: aIntentGroups.length,
+      bIntentGroupCount: bIntentGroups.length,
+      cIntentGroupCount: cIntentGroups.length,
+      dIntentGroupCount: dIntentGroups.length,
+      missingIntentGroupCount: missingIntentGroups.length,
+      highIntentGroupCount: highIntentGroups.length,
+      mediumIntentGroupCount: cIntentGroups.length,
+      lowIntentGroupCount: dIntentGroups.length,
       highRiskGroupCount: groups.filter((group) => group.riskLevel === 'high').length,
       activeTopicCount: source.metrics.activeTopicCount,
       totalMessageCount: source.metrics.totalMessageCount,
@@ -488,26 +660,8 @@ function buildFallbackSummary(source: DailyReportSourcePayload, modelConfig: Res
       assistantMessageCount: source.metrics.assistantMessageCount,
     },
     highlights,
-    keyCustomerGroups: groups.slice(0, 12).map((group) => ({
-      groupId: group.groupId,
-      topicId: group.topicId,
-      title: group.title,
-      ownerDisplayName: group.ownerDisplayName,
-      ownerEmail: group.ownerEmail,
-      firstMessageAt: group.firstMessageAt,
-      lastMessageAt: group.lastMessageAt,
-      totalMessageCount: group.totalMessageCount,
-      userMessageCount: group.userMessageCount,
-      assistantMessageCount: group.assistantMessageCount,
-      stage: group.stage,
-      intentLevel: group.intentLevel,
-      riskLevel: group.riskLevel,
-      overallSummary: group.overallSummary,
-      mainConcerns: group.mainConcerns,
-      managementNeed: group.managementNeed,
-      recommendedAction: group.recommendedAction,
-      evidenceMessageIds: group.evidenceMessageIds,
-    })),
+    keyCustomerGroups: highIntentGroups.slice(0, 12).map(mapGroupToSummaryItem),
+    missingInfoCustomers: missingIntentGroups.slice(0, 12).map(mapGroupToSummaryItem),
     commonConcerns,
     managementFocus,
     managementActions,
@@ -541,8 +695,12 @@ function renderMarkdown(summary: DailyReportSummary) {
   lines.push('');
   lines.push('## 核心指标');
   lines.push(`- 来访组数：${summary.stats.visitedGroupCount}`);
+  lines.push(`- A 类客户：${summary.stats.aIntentGroupCount}`);
+  lines.push(`- B 类客户：${summary.stats.bIntentGroupCount}`);
+  lines.push(`- C 类客户：${summary.stats.cIntentGroupCount}`);
+  lines.push(`- D 类客户：${summary.stats.dIntentGroupCount}`);
   lines.push(`- 高意向组数：${summary.stats.highIntentGroupCount}`);
-  lines.push(`- 中意向组数：${summary.stats.mediumIntentGroupCount}`);
+  lines.push(`- 信息不足组数：${summary.stats.missingIntentGroupCount}`);
   lines.push(`- 高风险组数：${summary.stats.highRiskGroupCount}`);
   lines.push(`- 总消息数：${summary.stats.totalMessageCount}`);
   lines.push(`- 客户消息数：${summary.stats.userMessageCount}`);
@@ -558,13 +716,28 @@ function renderMarkdown(summary: DailyReportSummary) {
   }
 
   if (summary.keyCustomerGroups.length > 0) {
-    lines.push('## 重点客户组简表');
+    lines.push('## 今日重点客户');
     for (const group of summary.keyCustomerGroups) {
       lines.push(`### ${group.title}`);
-      lines.push(`- 客户状态：阶段 ${group.stage} / 意向 ${group.intentLevel} / 风险 ${group.riskLevel}`);
+      lines.push(`- 销售员：${group.ownerDisplayName}`);
+      lines.push(`- 意向等级：${group.intentGrade ?? group.intentBand ?? '未识别'}`);
       lines.push(`- 主要关注：${group.mainConcerns.join('、')}`);
       lines.push(`- 摘要：${group.overallSummary}`);
       lines.push(`- 管理关注：${group.managementNeed}`);
+      lines.push(`- 建议动作：${group.recommendedAction}`);
+      lines.push('');
+    }
+  }
+
+  if (summary.missingInfoCustomers.length > 0) {
+    lines.push('## 待补信息客户');
+    for (const group of summary.missingInfoCustomers) {
+      lines.push(`### ${group.title}`);
+      lines.push(`- 销售员：${group.ownerDisplayName}`);
+      if (group.initialCustomerMessage) {
+        lines.push(`- 初始描述：${group.initialCustomerMessage}`);
+      }
+      lines.push(`- 摘要：${group.overallSummary}`);
       lines.push(`- 建议动作：${group.recommendedAction}`);
       lines.push('');
     }
@@ -606,8 +779,24 @@ function renderMarkdown(summary: DailyReportSummary) {
 
 function buildPromptInput(source: DailyReportSourcePayload) {
   const maxGroups = 24;
-  const maxMessagesPerGroup = 3;
-  const allGroups = buildTopicGroups(source);
+  const maxMessagesPerGroup = 6;
+  const allGroups = source.customers
+    .flatMap((owner) => owner.topics.map((topic) => ({
+      topicId: topic.topicId,
+      title: topic.title,
+      ownerDisplayName: owner.displayName,
+      ownerEmail: owner.email,
+      firstMessageAt: topic.messages[0]?.createdAt ?? topic.createdAt,
+      lastMessageAt: topic.messages[topic.messages.length - 1]?.createdAt ?? topic.updatedAt,
+      totalMessageCount: topic.messages.length,
+      recentMessages: topic.messages.slice(-maxMessagesPerGroup).map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: truncateText(message.content, 240),
+      })),
+      initialCustomerMessage: getInitialCustomerMessage(topic),
+    })))
+    .sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));
   const includedGroups = allGroups.slice(0, maxGroups);
   const truncatedGroups = allGroups.slice(maxGroups);
 
@@ -616,8 +805,6 @@ function buildPromptInput(source: DailyReportSourcePayload) {
     window: source.window,
     stats: {
       visitedGroupCount: allGroups.length,
-      highIntentGroupCount: allGroups.filter((group) => group.intentLevel === 'high').length,
-      highRiskGroupCount: allGroups.filter((group) => group.riskLevel === 'high').length,
       totalMessageCount: source.metrics.totalMessageCount,
       userMessageCount: source.metrics.userMessageCount,
       assistantMessageCount: source.metrics.assistantMessageCount,
@@ -625,16 +812,13 @@ function buildPromptInput(source: DailyReportSourcePayload) {
     groups: includedGroups.map((group) => ({
       topicId: group.topicId,
       title: group.title,
+      ownerDisplayName: group.ownerDisplayName,
+      ownerEmail: group.ownerEmail,
       firstMessageAt: group.firstMessageAt,
       lastMessageAt: group.lastMessageAt,
-      stage: group.stage,
-      intentLevel: group.intentLevel,
-      riskLevel: group.riskLevel,
-      mainConcerns: group.mainConcerns,
-      managementNeed: group.managementNeed,
-      recommendedAction: group.recommendedAction,
-      overallSummary: group.overallSummary,
-      lastUserMessages: group.lastUserMessages.slice(0, maxMessagesPerGroup),
+      totalMessageCount: group.totalMessageCount,
+      initialCustomerMessage: group.initialCustomerMessage,
+      recentMessages: group.recentMessages,
     })),
   };
 
@@ -689,9 +873,8 @@ function extractResponsesText(responseBody: Record<string, unknown>) {
   return chunks.join('\n').trim();
 }
 
-async function requestVolcengineBody(
+async function requestVolcengineIntentInsights(
   source: DailyReportSourcePayload,
-  executionSnapshot: DailyReportExecutionSnapshot,
   modelConfig: ResolvedModelConfig,
 ) {
   if (!modelConfig.endpoint || !modelConfig.apiKey) {
@@ -707,7 +890,7 @@ async function requestVolcengineBody(
     },
     body: JSON.stringify({
       model: modelConfig.modelName,
-      temperature: 0.2,
+      temperature: 0.1,
       input: [
         {
           role: 'user',
@@ -715,9 +898,22 @@ async function requestVolcengineBody(
             {
               type: 'input_text',
               text: [
-                executionSnapshot.promptSnapshot,
+                '你将收到项目客户对话的结构化原文。',
                 '',
-                `结构化依据如下：\n${JSON.stringify(promptInput.payload)}`,
+                '你的任务不是重新判断客户意向，也不是输出日报正文。',
+                '你只做结构化抽取：',
+                '1. 如果原文中的 AI 分析结果已经明确出现 A/B/C/D 等级，就提取出来。',
+                '2. intentBand 只允许返回 A/B/C/D/null。',
+                '3. intentGrade 返回原始等级文本，例如 B+、C+、B；如果没有明确等级则返回 null。',
+                '4. summary 输出一句中文结论，不超过 70 个字；如果没有明确等级，要明确写“信息不足，需要补充客户信息”。',
+                '5. 不得自行猜测等级；原文没有就返回 null。',
+                '6. topicId 必须原样返回。',
+                '7. 只输出 JSON，不要 markdown，不要解释。',
+                '',
+                '输出格式：',
+                '{"groups":[{"topicId":"...","intentBand":"A","intentGrade":"B+","summary":"..."}]}',
+                '',
+                `输入数据如下：\n${JSON.stringify(promptInput.payload)}`,
               ].join('\n'),
             },
           ],
@@ -739,7 +935,7 @@ async function requestVolcengineBody(
   }
 
   return {
-    bodyText: text,
+    insights: parseIntentExtractionResult(text),
     promptStats: promptInput.stats,
   };
 }
@@ -749,6 +945,7 @@ export async function generateDailyReportSummary(
   executionSnapshot: DailyReportExecutionSnapshot,
 ): Promise<DailyReportGenerationResult> {
   const modelConfig = resolveModelConfig(executionSnapshot);
+  const promptInput = buildPromptInput(source);
   const fallbackSummary = buildFallbackSummary(
     source,
     modelConfig,
@@ -761,16 +958,16 @@ export async function generateDailyReportSummary(
       summaryMarkdown: renderMarkdown(fallbackSummary),
       generationMeta: {
         ...fallbackSummary.generation,
-        includedGroupCount: fallbackSummary.keyCustomerGroups.length,
-        truncatedGroupCount: Math.max(0, buildTopicGroups(source).length - fallbackSummary.keyCustomerGroups.length),
+        ...promptInput.stats,
       },
     };
   }
 
   try {
-    const llmResult = await requestVolcengineBody(source, executionSnapshot, modelConfig);
+    const llmResult = await requestVolcengineIntentInsights(source, modelConfig);
+    const insightByTopicId = new Map(llmResult.insights.map((item) => [item.topicId, item]));
     const llmSummary: DailyReportSummary = {
-      ...fallbackSummary,
+      ...buildFallbackSummary(source, modelConfig, null, insightByTopicId),
       generation: {
         ...fallbackSummary.generation,
         modelProvider: modelConfig.provider,
@@ -785,7 +982,7 @@ export async function generateDailyReportSummary(
 
     return {
       summary: llmSummary,
-      summaryMarkdown: llmResult.bodyText,
+      summaryMarkdown: renderMarkdown(llmSummary),
       generationMeta: {
         ...llmSummary.generation,
         ...llmResult.promptStats,
@@ -805,8 +1002,7 @@ export async function generateDailyReportSummary(
       summaryMarkdown: renderMarkdown(failedFallbackSummary),
       generationMeta: {
         ...failedFallbackSummary.generation,
-        includedGroupCount: failedFallbackSummary.keyCustomerGroups.length,
-        truncatedGroupCount: Math.max(0, buildTopicGroups(source).length - failedFallbackSummary.keyCustomerGroups.length),
+        ...promptInput.stats,
       },
     };
   }

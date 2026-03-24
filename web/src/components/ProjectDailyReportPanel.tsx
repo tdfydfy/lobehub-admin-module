@@ -8,6 +8,7 @@ import type {
   ProjectDailyReportListFilters,
   ProjectDailyReportListResult,
   ProjectDailyReportSettings,
+  ProjectTopicDetailResult,
 } from '../types';
 
 type ProjectDailyReportPanelProps = {
@@ -110,6 +111,73 @@ function readNumber(record: Record<string, unknown> | null, key: string) {
   return typeof value === 'number' ? value : 0;
 }
 
+function formatMessageRole(role: string) {
+  switch (role) {
+    case 'assistant':
+      return '助手';
+    case 'system':
+      return '系统';
+    case 'tool':
+      return '工具';
+    case 'user':
+    default:
+      return '用户';
+  }
+}
+
+function getIntentGradeLabel(item: Record<string, unknown>) {
+  const rawGrade = readString(item, 'intentGrade');
+  const intentBand = readString(item, 'intentBand');
+
+  if (rawGrade) return rawGrade;
+  if (intentBand) return `${intentBand}类`;
+  return '信息不足';
+}
+
+function renderCustomerCards(
+  items: Array<Record<string, unknown>>,
+  onOpenTopic: (topicId: string) => void,
+  mode: 'key' | 'missing',
+) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="daily-report-card-list">
+      {items.map((item, index) => {
+        const topicId = readString(item, 'topicId');
+        const title = readString(item, 'title') || `客户 ${index + 1}`;
+        const owner = readString(item, 'ownerDisplayName') || '未识别销售员';
+        const summary = readString(item, 'overallSummary') || '暂无结论';
+        const lastMessageAt = readString(item, 'lastMessageAt');
+
+        return (
+          <article key={`${title}-${topicId || index}`} className="daily-report-customer-card">
+            <div className="daily-report-customer-head">
+              <div>
+                <strong>{title}</strong>
+                <p>{summary}</p>
+              </div>
+              {topicId ? (
+                <button className="table-link-button" type="button" onClick={() => onOpenTopic(topicId)}>
+                  查看对话
+                </button>
+              ) : null}
+            </div>
+            <div className="report-pill-row">
+              <span className="report-pill active">{getIntentGradeLabel(item)}</span>
+              <span className="report-pill">销售 {owner}</span>
+              {lastMessageAt ? <span className="report-pill">最近活跃 {formatTime(lastMessageAt)}</span> : null}
+            </div>
+            {mode === 'missing' && readString(item, 'initialCustomerMessage') ? (
+              <p className="muted">初始描述：{readString(item, 'initialCustomerMessage')}</p>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 function renderJsonList(items: Array<Record<string, unknown>>, titleKey: string, detailKey: string, extraKey?: string) {
   if (items.length === 0) return null;
 
@@ -142,6 +210,9 @@ export function ProjectDailyReportPanel({
   const [selectedReportId, setSelectedReportId] = useState('');
   const [reportDetail, setReportDetail] = useState<ProjectDailyReportDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [topicDetail, setTopicDetail] = useState<ProjectTopicDetailResult | null>(null);
+  const [topicDetailLoading, setTopicDetailLoading] = useState(false);
   const [jobs, setJobs] = useState<DailyReportJob[]>([]);
   const [activeJobId, setActiveJobId] = useState('');
   const [runBusinessDate, setRunBusinessDate] = useState('');
@@ -157,6 +228,8 @@ export function ProjectDailyReportPanel({
     setReportList(null);
     setSelectedReportId('');
     setReportDetail(null);
+    setSelectedTopicId(null);
+    setTopicDetail(null);
     setJobs([]);
     setActiveJobId('');
     setRunBusinessDate('');
@@ -239,6 +312,27 @@ export function ProjectDailyReportPanel({
   }, [actorId, projectId, selectedReportId, onFeedback]);
 
   useEffect(() => {
+    if (!actorId || !projectId || !selectedTopicId) return;
+    let cancelled = false;
+
+    void (async () => {
+      setTopicDetailLoading(true);
+      try {
+        const result = await api.getProjectTopicDetail(actorId, projectId, selectedTopicId);
+        if (!cancelled) setTopicDetail(result);
+      } catch (error) {
+        if (!cancelled) onFeedback((error as Error).message);
+      } finally {
+        if (!cancelled) setTopicDetailLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [actorId, projectId, selectedTopicId, onFeedback]);
+
+  useEffect(() => {
     if (!actorId || !projectId) return;
     let cancelled = false;
 
@@ -298,6 +392,7 @@ export function ProjectDailyReportPanel({
   const summaryStats = asObject(summary?.stats);
   const highlights = asObjectArray(summary?.highlights);
   const keyCustomerGroups = asObjectArray(summary?.keyCustomerGroups);
+  const missingInfoCustomers = asObjectArray(summary?.missingInfoCustomers);
   const commonConcerns = asObjectArray(summary?.commonConcerns);
   const managementFocus = asObjectArray(summary?.managementFocus);
   const managementActions = asObjectArray(summary?.managementActions);
@@ -311,15 +406,17 @@ export function ProjectDailyReportPanel({
     if (schemaVersion >= 2) {
       const parts = [
         readString(summaryOverview, 'executiveSummary'),
-        `今天一共来访 ${readNumber(summaryStats, 'visitedGroupCount')} 组，高意向 ${readNumber(summaryStats, 'highIntentGroupCount')} 组，高风险 ${readNumber(summaryStats, 'highRiskGroupCount')} 组。`,
+        `今天一共来访 ${readNumber(summaryStats, 'visitedGroupCount')} 组，其中 A 类 ${readNumber(summaryStats, 'aIntentGroupCount')} 组，B 类 ${readNumber(summaryStats, 'bIntentGroupCount')} 组，信息不足 ${readNumber(summaryStats, 'missingIntentGroupCount')} 组。`,
       ];
       const topConcerns = commonConcerns.slice(0, 4).map((item) => readString(item, 'label')).filter(Boolean).join('、');
       const focusItems = managementFocus.slice(0, 3).map((item) => readString(item, 'title')).filter(Boolean).join('；');
       const topActions = managementActions.slice(0, 3).map((item) => readString(item, 'title')).filter(Boolean).join('；');
       const keyGroups = keyCustomerGroups.slice(0, 3).map((item) => readString(item, 'title')).filter(Boolean).join('、');
+      const missingGroups = missingInfoCustomers.slice(0, 3).map((item) => readString(item, 'title')).filter(Boolean).join('、');
 
       if (topConcerns) parts.push(`客户最集中关注的问题是：${topConcerns}。`);
       if (keyGroups) parts.push(`当前优先关注的客户组包括：${keyGroups}。`);
+      if (missingGroups) parts.push(`当前仍需补充信息的客户包括：${missingGroups}。`);
       if (focusItems) parts.push(`管理上需要重点留意：${focusItems}。`);
       if (topActions) parts.push(`建议优先推动的动作是：${topActions}。`);
 
@@ -327,7 +424,7 @@ export function ProjectDailyReportPanel({
     }
 
     return readString(summaryOverview, 'executiveSummary') || reportDetail.summaryMarkdown;
-  }, [reportDetail, schemaVersion, summaryOverview, summaryStats, commonConcerns, managementFocus, managementActions, keyCustomerGroups]);
+  }, [reportDetail, schemaVersion, summaryOverview, summaryStats, commonConcerns, managementFocus, managementActions, keyCustomerGroups, missingInfoCustomers]);
 
   async function saveSettings() {
     if (!actorId || !projectId) return;
@@ -496,8 +593,8 @@ export function ProjectDailyReportPanel({
             <div className="daily-report-detail">
               <div className="stats-grid report-stats-grid">
                 <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '来访组数' : '来访客户'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'visitedGroupCount') : reportDetail.visitedCustomerCount}</strong><small className="stat-meta">营业日 {reportDetail.businessDate}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '高意向组数' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'highIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `高风险 ${readNumber(summaryStats, 'highRiskGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '活跃对话' : '客户消息'}</span><strong className="stat-value">{schemaVersion >= 2 ? reportDetail.activeTopicCount : reportDetail.userMessageCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `客户消息 ${reportDetail.userMessageCount} / 助手消息 ${reportDetail.assistantMessageCount}` : `助手消息 ${reportDetail.assistantMessageCount}`}</small></article>
+                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? 'A/B 高意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'highIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
+                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '信息不足' : '客户消息'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'missingIntentGroupCount') : reportDetail.userMessageCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `C类 ${readNumber(summaryStats, 'cIntentGroupCount')} / D类 ${readNumber(summaryStats, 'dIntentGroupCount')}` : `助手消息 ${reportDetail.assistantMessageCount}`}</small></article>
                 <article className="stat-card"><span className="stat-label">模型</span><strong className="stat-value topic-stat-time">{reportDetail.modelName}</strong><small className="stat-meta">{reportDetail.modelProvider}</small></article>
               </div>
 
@@ -507,6 +604,8 @@ export function ProjectDailyReportPanel({
                 <p>{readString(summaryOverview, 'executiveSummary') || '暂无摘要'}</p>
                 <div className="report-pill-row">
                   <span className="report-pill active">窗口 {formatTime(reportDetail.windowStartAt)} ~ {formatTime(reportDetail.windowEndAt)}</span>
+                  {schemaVersion >= 2 ? <span className="report-pill">A/B {readNumber(summaryStats, 'highIntentGroupCount')}</span> : null}
+                  {schemaVersion >= 2 ? <span className="report-pill">信息不足 {readNumber(summaryStats, 'missingIntentGroupCount')}</span> : null}
                   <span className="report-pill">系统提示词版本 {reportDetail.systemPromptVersion}</span>
                 </div>
               </div>
@@ -519,7 +618,8 @@ export function ProjectDailyReportPanel({
               <details className="daily-report-structured">
                 <summary>查看结构化依据</summary>
                 {highlights.length > 0 ? <div className="daily-report-section"><h4>{schemaVersion >= 2 ? '今日重点' : '重点发现'}</h4>{renderJsonList(highlights, 'title', 'detail')}</div> : null}
-                {schemaVersion >= 2 && keyCustomerGroups.length > 0 ? <div className="daily-report-section"><h4>重点客户组清单</h4>{renderJsonList(keyCustomerGroups, 'title', 'overallSummary', 'managementNeed')}</div> : null}
+                {schemaVersion >= 2 && keyCustomerGroups.length > 0 ? <div className="daily-report-section"><h4>今日重点客户</h4>{renderCustomerCards(keyCustomerGroups, (topicId) => setSelectedTopicId(topicId), 'key')}</div> : null}
+                {schemaVersion >= 2 && missingInfoCustomers.length > 0 ? <div className="daily-report-section"><h4>待补信息客户</h4>{renderCustomerCards(missingInfoCustomers, (topicId) => setSelectedTopicId(topicId), 'missing')}</div> : null}
                 {schemaVersion >= 2 && commonConcerns.length > 0 ? <div className="daily-report-section"><h4>客户整体关注点</h4>{renderJsonList(commonConcerns, 'label', 'detail')}</div> : null}
                 {schemaVersion >= 2 && managementFocus.length > 0 ? <div className="daily-report-section"><h4>管理上需要关注的问题</h4>{renderJsonList(managementFocus, 'title', 'detail', 'severity')}</div> : null}
                 {schemaVersion >= 2 && managementActions.length > 0 ? <div className="daily-report-section"><h4>建议提供的管理动作或道具</h4>{renderJsonList(managementActions, 'title', 'detail', 'reason')}</div> : null}
@@ -542,6 +642,56 @@ export function ProjectDailyReportPanel({
           <div className="empty-card"><p>{detailLoading ? '正在加载日报详情...' : '请选择一份日报查看详情。'}</p></div>
         )}
       </section>
+
+      {selectedTopicId ? (
+        <div className="raw-modal-backdrop topic-detail-backdrop" onClick={() => { setSelectedTopicId(null); setTopicDetail(null); }}>
+          <div className="raw-modal topic-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">Conversation</p>
+                <h3>{topicDetail?.topic.title ?? '对话详情'}</h3>
+              </div>
+              <button className="ghost" onClick={() => { setSelectedTopicId(null); setTopicDetail(null); }}>
+                关闭
+              </button>
+            </div>
+
+            {topicDetail ? (
+              <>
+                <div className="report-pill-row">
+                  <span className="report-pill active">{topicDetail.topic.displayName}</span>
+                  <span className="report-pill">{topicDetail.topic.email ?? topicDetail.topic.userId}</span>
+                  <span className="report-pill">会话 {topicDetail.topic.managedSessionTitle ?? '-'}</span>
+                </div>
+
+                <p className="muted topic-modal-meta">
+                  创建：{formatTime(topicDetail.topic.createdAt)} / 更新：{formatTime(topicDetail.topic.updatedAt)} / 消息数 {topicDetail.messages.length}
+                </p>
+              </>
+            ) : null}
+
+            {topicDetailLoading ? <p className="muted">正在加载对话详情...</p> : null}
+
+            {!topicDetailLoading && topicDetail ? (
+              topicDetail.messages.length > 0 ? (
+                <div className="topic-message-list">
+                  {topicDetail.messages.map((message) => (
+                    <article key={message.id} className="topic-message-card">
+                      <div className="topic-message-head">
+                        <span className={`topic-role-badge ${message.role}`}>{formatMessageRole(message.role)}</span>
+                        <span className="muted">{formatTime(message.createdAt)}</span>
+                      </div>
+                      <div className="topic-message-content">{message.content ?? '暂无内容'}</div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-card"><p>当前对话下没有可展示的消息内容。</p></div>
+              )
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );
