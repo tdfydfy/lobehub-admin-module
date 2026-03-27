@@ -194,6 +194,71 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_lobehub_admin_project_daily_reports_curren
   ON lobehub_admin.project_daily_reports(project_id, business_date)
   WHERE is_current;
 
+CREATE TABLE IF NOT EXISTS lobehub_admin.project_customer_analysis_sessions (
+  id text PRIMARY KEY DEFAULT lobehub_admin.gen_id('cas_'),
+  project_id text NOT NULL REFERENCES lobehub_admin.projects(id) ON DELETE CASCADE,
+  title text NOT NULL DEFAULT '新会话',
+  created_by text REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lobehub_admin_customer_analysis_sessions_project
+  ON lobehub_admin.project_customer_analysis_sessions(project_id, updated_at DESC, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS lobehub_admin.project_customer_analysis_messages (
+  id text PRIMARY KEY DEFAULT lobehub_admin.gen_id('cam_'),
+  session_id text NOT NULL REFERENCES lobehub_admin.project_customer_analysis_sessions(id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('user', 'assistant')),
+  content text NOT NULL DEFAULT '',
+  range_preset text CHECK (range_preset IN ('today', 'last7days', 'last30days', 'custom')),
+  date_from date,
+  date_to date,
+  start_at timestamp with time zone,
+  end_at timestamp with time zone,
+  model_provider text,
+  model_name text,
+  generation_meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by text REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lobehub_admin_customer_analysis_messages_session
+  ON lobehub_admin.project_customer_analysis_messages(session_id, created_at ASC, id ASC);
+
+CREATE TABLE IF NOT EXISTS lobehub_admin.project_customer_analysis_jobs (
+  id text PRIMARY KEY DEFAULT lobehub_admin.gen_id('caj_'),
+  project_id text NOT NULL REFERENCES lobehub_admin.projects(id) ON DELETE CASCADE,
+  session_id text NOT NULL REFERENCES lobehub_admin.project_customer_analysis_sessions(id) ON DELETE CASCADE,
+  user_message_id text NOT NULL REFERENCES lobehub_admin.project_customer_analysis_messages(id) ON DELETE CASCADE,
+  assistant_message_id text REFERENCES lobehub_admin.project_customer_analysis_messages(id) ON DELETE SET NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+  range_preset text NOT NULL CHECK (range_preset IN ('today', 'last7days', 'last30days', 'custom')),
+  date_from date NOT NULL,
+  date_to date NOT NULL,
+  start_at timestamp with time zone NOT NULL,
+  end_at timestamp with time zone NOT NULL,
+  model_provider text,
+  model_name text,
+  created_by text REFERENCES public.users(id) ON DELETE SET NULL,
+  error_message text,
+  started_at timestamp with time zone,
+  finished_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lobehub_admin_customer_analysis_jobs_project
+  ON lobehub_admin.project_customer_analysis_jobs(project_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_lobehub_admin_customer_analysis_jobs_session
+  ON lobehub_admin.project_customer_analysis_jobs(session_id, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lobehub_admin_customer_analysis_jobs_active
+  ON lobehub_admin.project_customer_analysis_jobs(session_id)
+  WHERE status IN ('pending', 'running');
+
 CREATE OR REPLACE FUNCTION lobehub_admin.user_display_name(p_user_id text)
 RETURNS text
 LANGUAGE sql
@@ -270,6 +335,24 @@ EXECUTE FUNCTION lobehub_admin.touch_updated_at();
 DROP TRIGGER IF EXISTS trg_touch_updated_at_project_daily_reports ON lobehub_admin.project_daily_reports;
 CREATE TRIGGER trg_touch_updated_at_project_daily_reports
 BEFORE UPDATE ON lobehub_admin.project_daily_reports
+FOR EACH ROW
+EXECUTE FUNCTION lobehub_admin.touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_touch_updated_at_customer_analysis_sessions ON lobehub_admin.project_customer_analysis_sessions;
+CREATE TRIGGER trg_touch_updated_at_customer_analysis_sessions
+BEFORE UPDATE ON lobehub_admin.project_customer_analysis_sessions
+FOR EACH ROW
+EXECUTE FUNCTION lobehub_admin.touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_touch_updated_at_customer_analysis_messages ON lobehub_admin.project_customer_analysis_messages;
+CREATE TRIGGER trg_touch_updated_at_customer_analysis_messages
+BEFORE UPDATE ON lobehub_admin.project_customer_analysis_messages
+FOR EACH ROW
+EXECUTE FUNCTION lobehub_admin.touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_touch_updated_at_customer_analysis_jobs ON lobehub_admin.project_customer_analysis_jobs;
+CREATE TRIGGER trg_touch_updated_at_customer_analysis_jobs
+BEFORE UPDATE ON lobehub_admin.project_customer_analysis_jobs
 FOR EACH ROW
 EXECUTE FUNCTION lobehub_admin.touch_updated_at();
 

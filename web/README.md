@@ -27,6 +27,7 @@ http://127.0.0.1:4173
 当前已提供生产环境变量文件：
 
 - `.env.production`
+- `.env.production.example`
 
 默认内容：
 
@@ -34,6 +35,8 @@ http://127.0.0.1:4173
 VITE_PUBLIC_BASE=/admin/
 VITE_API_BASE_URL=/admin-api
 ```
+
+如果构建环境没有显式提供 `VITE_PUBLIC_BASE` / `VITE_API_BASE_URL`，当前生产构建也会默认回退到 `/admin/` 与 `/admin-api`，避免在子路径部署时生成错误的 `/assets/...` 入口。
 
 生产构建命令：
 

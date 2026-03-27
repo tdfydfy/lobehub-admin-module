@@ -1,5 +1,21 @@
 # LobeHub Admin Module
 
+## Update 2026-03-27
+
+- 新增“自由盘点”能力：
+  - 管理端项目详情页新增“自由盘点”标签，移动端在“总览 / 更多”里提供轻量入口
+  - 支持项目管理员新建自由盘点会话、输入自由提示词、按时间窗口读取托管会话对话并生成分析结论
+  - 提交后改为后台任务执行，前端轮询任务状态并在会话中回写结果，不再依赖长时间同步请求
+  - 后端新增 `/api/projects/:projectId/customer-analysis/...` 路由，并在服务启动时自动恢复未完成任务
+- 数据库与升级脚本已补齐自由盘点结构：
+  - 新增 `sql/008_customer_analysis_chat.sql`
+  - 新增 `sql/009_customer_analysis_jobs.sql`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009`
+- 前端生产构建兜底策略已补齐：
+  - 默认生产 `base` 回退为 `/admin/`
+  - 默认生产 API 地址回退为 `/admin-api`
+  - `web/.env.production` 已纳入仓库，避免漏配后生成错误的 `/assets/...` 路径
+
 ## Update 2026-03-24
 
 - 日报意向与重点客户口径补齐：
@@ -33,7 +49,7 @@
 - 数据库与升级脚本已补齐日报相关增量：
   - 新环境的 `sql/001_project_admin_core.sql` 已包含日报表、索引与触发器
   - 已部署旧环境新增 `sql/006_daily_reports.sql` 与 `sql/007_daily_report_volcengine_provider.sql`
-  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009`
 - 日报正文已切到火山 `volcengine` 模型：
   - 使用 `https://ark.cn-beijing.volces.com/api/v3/responses`
   - 当前默认模型为 `doubao-seed-2-0-lite-260215`
@@ -146,6 +162,8 @@
 - `sql/005_check_project_managed_mapping_health.sql`：升级前只读自检
 - `sql/006_daily_reports.sql`：已部署环境补齐日报设置、任务、结果表
 - `sql/007_daily_report_volcengine_provider.sql`：将日报模型 provider 覆盖口径扩展为 `volcengine / fallback`
+- `sql/008_customer_analysis_chat.sql`：已部署环境补齐自由盘点会话与消息表
+- `sql/009_customer_analysis_jobs.sql`：已部署环境补齐自由盘点任务表，支持后台执行与轮询状态
 - `scripts/apply-project-admin-core.ps1`：安装核心 schema
 - `scripts/check-project-admin-mappings.ps1`：执行升级前映射健康检查
 - `scripts/upgrade-existing-project-admin.ps1`：执行已部署环境的增量升级
@@ -163,7 +181,7 @@
 3. 已部署旧环境按需执行：
    - 先执行 `scripts/check-project-admin-mappings.ps1`
    - 再执行 `scripts/upgrade-existing-project-admin.ps1`
-   - 当前升级脚本会自动串行执行 `003 / 004 / 006 / 007`
+   - 当前升级脚本会自动串行执行 `003 / 004 / 006 / 007 / 008 / 009`
 4. 启动独立管理端 API
 5. 启动独立管理端 UI
 
@@ -203,6 +221,11 @@
   - 支持项目级日报设置、营业日截点、项目补充要求、模型覆盖
   - 支持手动生成、自动调度、任务轮询、列表查询、详情查看
   - 支持查看结构化 JSON 与 Markdown 原文
+- 项目自由盘点
+  - 支持新建自由盘点会话并保留历史消息
+  - 支持按“今日 / 近 7 天 / 近 30 天 / 自定义区间”聚合托管对话
+  - 支持管理员输入自由提示词，提交后台任务并将分析结论写回会话
+  - Web 端提供完整工作台，移动端提供精简入口与任务查看
 - 项目对话统计
   - 统计口径为项目托管会话内创建的 `topic`
   - 支持当日、近三天、近七天、一个月、指定日期范围

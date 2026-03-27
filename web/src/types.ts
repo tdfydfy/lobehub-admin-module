@@ -469,6 +469,80 @@ export type DailyReportJobsResult = {
   jobs: DailyReportJob[];
 };
 
+export type CustomerAnalysisRangePreset = 'today' | 'last7days' | 'last30days' | 'custom';
+
+export type ProjectCustomerAnalysisJob = {
+  id: string;
+  projectId: string;
+  sessionId: string;
+  userMessageId: string;
+  assistantMessageId: string | null;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  promptPreview: string;
+  rangePreset: CustomerAnalysisRangePreset;
+  dateFrom: string;
+  dateTo: string;
+  startAt: string;
+  endAt: string;
+  modelProvider: string | null;
+  modelName: string | null;
+  errorMessage: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type ProjectCustomerAnalysisJobsResult = {
+  jobs: ProjectCustomerAnalysisJob[];
+};
+
+export type ProjectCustomerAnalysisSession = {
+  id: string;
+  title: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastMessageAt: string | null;
+  lastMessageRole: 'user' | 'assistant' | null;
+  lastMessagePreview: string | null;
+};
+
+export type ProjectCustomerAnalysisMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  rangePreset: CustomerAnalysisRangePreset | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  modelProvider: string | null;
+  modelName: string | null;
+  generationMeta: Record<string, unknown> | null;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectCustomerAnalysisSessionDetail = {
+  session: ProjectCustomerAnalysisSession;
+  messages: ProjectCustomerAnalysisMessage[];
+  activeJob: ProjectCustomerAnalysisJob | null;
+};
+
+export type CreateProjectCustomerAnalysisJobResult = {
+  session: ProjectCustomerAnalysisSession;
+  messages: ProjectCustomerAnalysisMessage[];
+  userMessage: ProjectCustomerAnalysisMessage;
+  activeJob: ProjectCustomerAnalysisJob | null;
+  job: ProjectCustomerAnalysisJob;
+};
+
 export type DatabaseTableOption = {
   schema: string;
   name: string;

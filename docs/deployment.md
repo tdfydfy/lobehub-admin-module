@@ -39,6 +39,8 @@
 - `lobehub-admin-module/sql/004_repair_project_managed_mappings.sql`
 - `lobehub-admin-module/sql/006_daily_reports.sql`
 - `lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql`
+- `lobehub-admin-module/sql/008_customer_analysis_chat.sql`
+- `lobehub-admin-module/sql/009_customer_analysis_jobs.sql`
 
 本地 Docker `postgres` 环境优先使用：
 
@@ -54,6 +56,8 @@
 - `004` 不会凭空推断缺失的项目映射；如果某个成员完全没有 `project_managed_agents` 记录，仍应重新执行一次项目助手配置或刷新。
 - `006` 用于补齐日报设置表、日报任务表、日报结果表，以及对应索引与触发器。
 - `007` 用于将日报模型 provider 的约束修正为 `volcengine / fallback`。
+- `008` 用于补齐自由盘点会话与消息表。
+- `009` 用于补齐自由盘点任务表，支持提交任务后后台执行与轮询状态。
 
 如果需要单独执行某一份 SQL，再回退使用：
 
@@ -62,6 +66,8 @@
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/006_daily_reports.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/008_customer_analysis_chat.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/009_customer_analysis_jobs.sql"
 ```
 
 ### 2.2 如需关闭旧的全局自动下发
@@ -131,6 +137,7 @@ http://127.0.0.1:3321
 
 补充说明：
 - 服务进程启动时会自动恢复未完成的日报任务。
+- 服务进程启动时也会自动恢复未完成的自由盘点任务。
 - 服务进程会每 60 秒扫描一次已启用项目的日报到点情况。
 - 如果未显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER`，但配置了 `VOLCENGINE_API_KEY`，当前会默认走 `volcengine`；否则回退为内建摘要器。
 
@@ -211,6 +218,12 @@ http://127.0.0.1:4173/database-viewer.html
 VITE_PUBLIC_BASE=/admin/
 VITE_API_BASE_URL=/admin-api
 ```
+
+补充说明：
+- 如果没有显式提供 `VITE_PUBLIC_BASE` / `VITE_API_BASE_URL`，当前生产构建也会默认回退到 `/admin/` 与 `/admin-api`
+- 构建完成后建议先检查 `web/dist/index.html` 与 `web/dist/database-viewer.html`
+  - 静态资源应指向 `/admin/assets/...`
+  - 如果仍然是 `/assets/...`，说明这次构建没有按管理端子路径产出，上传后会导致 `/admin/` 白屏或资源 404
 
 构建方式：
 

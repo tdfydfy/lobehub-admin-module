@@ -22,6 +22,10 @@
   - 日报设置、日报任务、日报结果表结构
   - 日报手动生成、自动调度、列表与详情
   - `volcengine` 作为当前推荐日报模型 provider
+- 自由盘点能力
+  - 自由盘点会话、消息与任务表结构
+  - Web 完整工作台 + Mobile 轻量入口
+  - 提交后后台执行并轮询状态，不再依赖长时间同步请求
 - 双域名 HTTPS 支持
 - HTTP IP 兜底入口保留
 - SPA HTML `no-cache` 网关头
@@ -76,6 +80,10 @@ cd D:\lobe-hub2
   - 补齐相关索引与 `updated_at` 触发器
 - `007_daily_report_volcengine_provider.sql`
   - 将日报模型 provider 约束扩展为 `volcengine / fallback`
+- `008_customer_analysis_chat.sql`
+  - 增加自由盘点会话表、消息表以及对应索引和 `updated_at` 触发器
+- `009_customer_analysis_jobs.sql`
+  - 增加自由盘点任务表、任务状态索引以及 `updated_at` 触发器
 
 限制：
 - `004` 只修复已经存在的项目映射。
@@ -88,6 +96,8 @@ cd D:\lobe-hub2
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/004_repair_project_managed_mappings.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/006_daily_reports.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/008_customer_analysis_chat.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/009_customer_analysis_jobs.sql"
 ```
 
 ## 4. 上传需要更新的文件
@@ -115,6 +125,10 @@ cd D:\lobe-hub2
 ```
 
 来源是新的 `web/dist/`。
+
+额外检查：
+- `web/dist/index.html` 与 `web/dist/database-viewer.html` 里的静态资源路径应为 `/admin/assets/...`
+- 如果构建结果仍然引用 `/assets/...`，不要上传到服务器；这会导致 `/admin/` 入口无法打开
 
 ### 4.3 网关
 
@@ -160,7 +174,7 @@ VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 - 当前推荐显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine`。
 - 如未显式设置 provider，但存在 `VOLCENGINE_API_KEY`，日报会默认走 `volcengine`。
 - 日报提示词当前固定为两层：系统提示词 + 项目补充要求。
-- 服务重启后会自动恢复未完成日报任务，并继续每 60 秒执行一次到点扫描。
+- 服务重启后会自动恢复未完成日报任务与自由盘点任务，并继续每 60 秒执行一次到点扫描。
 
 ### 为什么这里还是 `false`
 

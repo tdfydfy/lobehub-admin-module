@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { ProjectCustomerAnalysisMobilePage } from './ProjectCustomerAnalysisMobilePage';
 import { api } from '../lib/api';
 import { formatTimeToShanghai } from '../lib/time';
 import type {
@@ -29,6 +30,7 @@ type MobilePage =
   | 'overview'
   | 'members'
   | 'provision'
+  | 'analysis'
   | 'topics'
   | 'topicList'
   | 'topicDetail'
@@ -137,6 +139,22 @@ function normalizeTopicFilters(filters: TopicFilterState): ProjectTopicStatsFilt
   return normalized;
 }
 
+function getTopicFilterValidationMessage(filters: Pick<TopicFilterState, 'rangePreset' | 'dateFrom' | 'dateTo'>) {
+  if (filters.rangePreset !== 'custom') {
+    return '';
+  }
+
+  if (!filters.dateFrom || !filters.dateTo) {
+    return '自定义范围需要同时填写开始日期和结束日期。';
+  }
+
+  if (filters.dateFrom > filters.dateTo) {
+    return '开始日期不能晚于结束日期。';
+  }
+
+  return '';
+}
+
 function normalizeSettingsToDraft(settings: ProjectDailyReportSettings): DailySettingsDraft {
   return {
     enabled: settings.enabled,
@@ -226,7 +244,7 @@ function getRootTabForPage(page: MobilePage, canAccessDaily: boolean): MobileRoo
     return canAccessDaily ? 'daily' : 'more';
   }
 
-  if (page === 'members' || page === 'provision' || page === 'more') {
+  if (page === 'members' || page === 'provision' || page === 'analysis' || page === 'more') {
     return 'more';
   }
 
@@ -909,12 +927,15 @@ function MobileOverviewPage({
                 <h3>快捷操作</h3>
               </div>
             </div>
-            <div className="mobile-action-row">
+            <div className="mobile-action-row compact">
               <button className="mobile-button primary" type="button" onClick={() => onOpenPage('members')}>
                 添加成员
               </button>
               <button className="mobile-button secondary" type="button" onClick={() => onOpenPage('provision')}>
                 配置助手
+              </button>
+              <button className="mobile-button secondary" type="button" onClick={() => onOpenPage('analysis')}>
+                自由盘点
               </button>
               <button className="mobile-button secondary" type="button" onClick={() => onOpenPage('daily')}>
                 生成日报
@@ -1679,8 +1700,15 @@ function MobileTopicsPage({
 }) {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<ProjectTopicStatsResult | null>(null);
+  const filterValidationMessage = getTopicFilterValidationMessage(filters);
 
   useEffect(() => {
+    if (filterValidationMessage) {
+      setReport(null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadTopicStats() {
@@ -1702,7 +1730,7 @@ function MobileTopicsPage({
     return () => {
       cancelled = true;
     };
-  }, [actorId, filters, onFeedback, projectId]);
+  }, [actorId, filterValidationMessage, filters, onFeedback, projectId]);
 
   function updateRangePreset(rangePreset: ProjectTopicStatsRangePreset) {
     setFilters({
@@ -1822,9 +1850,15 @@ function MobileTopicListPage({
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ProjectTopicListResult | null>(null);
+  const filterValidationMessage = getTopicFilterValidationMessage(filters);
 
   useEffect(() => {
     if (!selection) return;
+    if (filterValidationMessage) {
+      setResult(null);
+      setLoading(false);
+      return;
+    }
 
     const memberUserId = selection.member.userId;
     let cancelled = false;
@@ -1854,7 +1888,7 @@ function MobileTopicListPage({
     return () => {
       cancelled = true;
     };
-  }, [actorId, filters, onFeedback, projectId, selection]);
+  }, [actorId, filterValidationMessage, filters, onFeedback, projectId, selection]);
 
   return (
     <div className="mobile-page">
@@ -2386,6 +2420,7 @@ function MobileMorePage({
   canManageProject,
   onOpenMembers,
   onOpenProvision,
+  onOpenAnalysis,
   onOpenProjects,
   onLogout,
 }: {
@@ -2393,6 +2428,7 @@ function MobileMorePage({
   canManageProject: boolean;
   onOpenMembers: () => void;
   onOpenProvision: () => void;
+  onOpenAnalysis: () => void;
   onOpenProjects: () => void;
   onLogout: () => void;
 }) {
@@ -2434,6 +2470,12 @@ function MobileMorePage({
                 <div>
                   <strong>助手分配</strong>
                   <p>配置模板助手并发起批量同步</p>
+                </div>
+              </button>
+              <button className="mobile-list-button" type="button" onClick={onOpenAnalysis}>
+                <div>
+                  <strong>自由盘点</strong>
+                  <p>自由输入提示词，提交自由盘点任务并查看结果</p>
                 </div>
               </button>
             </>
@@ -2566,7 +2608,7 @@ export default function AppMobile() {
   useEffect(() => {
     if (!currentProjectRole) return;
 
-    if (!canManageProject && ['members', 'provision', 'daily', 'dailyDetail'].includes(currentPage)) {
+    if (!canManageProject && ['members', 'provision', 'analysis', 'daily', 'dailyDetail'].includes(currentPage)) {
       setCurrentPage('overview');
     }
   }, [canManageProject, currentPage, currentProjectRole]);
@@ -2651,7 +2693,7 @@ export default function AppMobile() {
       return;
     }
 
-    if (currentPage === 'members' || currentPage === 'provision') {
+    if (currentPage === 'members' || currentPage === 'provision' || currentPage === 'analysis') {
       setCurrentPage('overview');
     }
   }
@@ -2808,13 +2850,14 @@ export default function AppMobile() {
         title={
           currentPage === 'members' ? '成员管理'
             : currentPage === 'provision' ? '助手分配'
-              : currentPage === 'topics' ? '对话'
-                : currentPage === 'topicList' ? '对话清单'
-                  : currentPage === 'topicDetail' ? '对话详情'
-                    : currentPage === 'daily' ? '日报'
-                      : currentPage === 'dailyDetail' ? '日报详情'
-                        : currentPage === 'more' ? '更多'
-                          : '总览'
+              : currentPage === 'analysis' ? '自由盘点'
+                : currentPage === 'topics' ? '对话'
+                  : currentPage === 'topicList' ? '对话清单'
+                    : currentPage === 'topicDetail' ? '对话详情'
+                      : currentPage === 'daily' ? '日报'
+                        : currentPage === 'dailyDetail' ? '日报详情'
+                          : currentPage === 'more' ? '更多'
+                            : '总览'
         }
         projectName={currentProject.name}
         roleLabel={formatRole(currentProjectRole ?? 'member')}
@@ -2853,6 +2896,14 @@ export default function AppMobile() {
             projectId={currentProject.id}
             onFeedback={showFeedback}
             onTaskChanged={() => setTaskRefreshKey((current) => current + 1)}
+          />
+        ) : null}
+
+        {currentPage === 'analysis' && canManageProject ? (
+          <ProjectCustomerAnalysisMobilePage
+            actorId={actorId}
+            projectId={currentProject.id}
+            onFeedback={showFeedback}
           />
         ) : null}
 
@@ -2914,6 +2965,7 @@ export default function AppMobile() {
             canManageProject={canManageProject}
             onOpenMembers={() => setCurrentPage('members')}
             onOpenProvision={() => setCurrentPage('provision')}
+            onOpenAnalysis={() => setCurrentPage('analysis')}
             onOpenProjects={() => setProjectSwitcherOpen(true)}
             onLogout={() => void handleLogout()}
           />

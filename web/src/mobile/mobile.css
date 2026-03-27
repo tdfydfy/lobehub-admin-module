@@ -543,6 +543,68 @@ button {
   resize: vertical;
 }
 
+.mobile-analysis-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mobile-analysis-preset-row .mobile-chip-button {
+  text-align: left;
+}
+
+.mobile-analysis-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.mobile-analysis-input {
+  width: 100%;
+}
+
+.mobile-analysis-input textarea {
+  display: block;
+  width: 100%;
+  min-height: 160px;
+}
+
+.mobile-analysis-actions .mobile-button {
+  flex: 1 1 160px;
+}
+
+.mobile-analysis-session-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.mobile-analysis-session-item > div:first-child {
+  width: 100%;
+}
+
+.mobile-analysis-session-item > div:first-child p {
+  display: none;
+}
+
+.mobile-analysis-session-item > div:last-child {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.mobile-analysis-session-item > div:last-child span:first-child {
+  display: none;
+}
+
+.mobile-analysis-session-item > div:last-child span:last-child {
+  color: var(--mobile-muted);
+}
+
 .mobile-toggle {
   display: flex;
   gap: 10px;

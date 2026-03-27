@@ -338,6 +338,126 @@ button.assistant-detail-trigger.active {
   grid-column: 2;
   grid-row: 3;
 }
+.customer-analysis-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.customer-analysis-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.customer-analysis-sidebar,
+.customer-analysis-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.customer-analysis-session-list,
+.customer-analysis-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.customer-analysis-session-list {
+  max-height: 760px;
+  overflow: auto;
+}
+.customer-analysis-session-item,
+.customer-analysis-chat-card,
+.customer-analysis-composer-card,
+.customer-analysis-message-card,
+.customer-analysis-job-card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+}
+.customer-analysis-session-item,
+.customer-analysis-chat-card,
+.customer-analysis-composer-card,
+.customer-analysis-job-card {
+  padding: 16px 18px;
+}
+.customer-analysis-session-item {
+  width: 100%;
+  text-align: left;
+}
+.customer-analysis-session-item.active {
+  border-color: rgba(163, 63, 35, 0.46);
+  background: rgba(255, 244, 238, 0.94);
+}
+.customer-analysis-session-item p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.customer-analysis-chat-card,
+.customer-analysis-composer-card {
+  box-shadow: var(--shadow);
+}
+.customer-analysis-message-list {
+  max-height: 640px;
+  overflow: auto;
+}
+.customer-analysis-message-card {
+  padding: 14px 16px;
+}
+.customer-analysis-message-card.user {
+  border-left: 4px solid rgba(163, 63, 35, 0.36);
+}
+.customer-analysis-message-card.assistant {
+  border-left: 4px solid rgba(109, 91, 77, 0.28);
+}
+.customer-analysis-message-card.pending {
+  border-style: dashed;
+}
+.customer-analysis-message-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.customer-analysis-job-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.customer-analysis-job-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.customer-analysis-job-card.active {
+  border-color: rgba(163, 63, 35, 0.32);
+  background: rgba(255, 244, 238, 0.78);
+}
+.customer-analysis-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.customer-analysis-message-content {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  color: var(--text);
+}
+.customer-analysis-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.customer-analysis-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
 .data-browser-page { display: flex; flex-direction: column; gap: 18px; }
 .member-form-grid { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; align-items: start; }
 .field-grow { margin-bottom: 0; }
@@ -558,6 +678,10 @@ button.assistant-detail-trigger.active {
   border-color: rgba(163, 63, 35, 0.28);
   background: rgba(255, 244, 238, 0.94);
   color: var(--brand-deep);
+}
+.report-pill.danger {
+  background: rgba(177, 54, 54, 0.14);
+  color: #8a1f1f;
 }
 .report-pill-button {
   border: 1px solid var(--line);
@@ -862,6 +986,8 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .member-form-grid { grid-template-columns: 1fr; }
   .assistant-detail-grid, .assistant-skill-list { grid-template-columns: 1fr; }
   .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer-analysis-layout { grid-template-columns: 1fr; }
+  .customer-analysis-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topic-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .daily-report-page {
     grid-template-columns: 1fr;
@@ -885,7 +1011,8 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .statusbar { font-size: 13px; }
   .data-browser-toolbar, .raw-column-toolbar { flex-direction: column; align-items: stretch; }
   .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: 1fr; }
+  .customer-analysis-filter-grid { grid-template-columns: 1fr; }
   .topic-filter-grid { grid-template-columns: 1fr; }
-  .daily-report-run-row, .daily-report-customer-head { flex-direction: column; align-items: stretch; }
+  .daily-report-run-row, .daily-report-customer-head, .customer-analysis-message-head, .customer-analysis-job-card { flex-direction: column; align-items: stretch; }
   .report-toolbar, .report-pagination { flex-direction: column; align-items: stretch; }
 }

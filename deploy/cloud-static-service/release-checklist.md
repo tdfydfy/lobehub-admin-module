@@ -5,6 +5,7 @@
 - 已设置 `VITE_PUBLIC_BASE=/admin/`
 - 已设置 `VITE_API_BASE_URL=/admin-api`
 - 已执行 `npm run build`
+- 已确认 `web/dist/index.html` 与 `web/dist/database-viewer.html` 中引用的是 `/admin/assets/...`
 - 已确认 `web/dist/index.html` 可从 `/admin/` 打开
 - 已确认 `web/dist/database-viewer.html` 可从 `/admin/database-viewer.html` 打开
 
@@ -23,6 +24,8 @@
 
 - 已增加 `/admin/` 静态目录路由
 - 已增加 `/admin-api/` 反向代理路由
+- 已按网关策略配置 `/admin-api/` 的 `proxy_read_timeout` / `proxy_send_timeout`
+  - 推荐保留宽松超时作为兼容兜底；当前“自由盘点”和“日报手动触发”已任务化，正常会快速返回任务 ID
 - 已透传：
   - `Host`
   - `X-Real-IP`

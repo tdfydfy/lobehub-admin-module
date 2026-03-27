@@ -41,6 +41,8 @@
 - Nginx
   - `location /admin/` 指向静态文件
   - `location /admin-api/` 反代到管理端后端容器
+  - 对 `location /admin-api/` 建议补充 `proxy_read_timeout / proxy_send_timeout`
+    - 作为兼容兜底可以保留宽松超时；当前“自由盘点”和“日报手动触发”都已经任务化，正常会快速返回任务 ID
 
 ## 当前代码侧已支持的云端能力
 

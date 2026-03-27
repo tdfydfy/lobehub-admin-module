@@ -1,18 +1,23 @@
 ﻿import type {
   AgentOption,
   ActorContext,
+  CustomerAnalysisRangePreset,
   DatabaseTableListResult,
   DatabaseTableDataResult,
   JobDetail,
   JobItem,
   DailyReportJob,
   MobileProjectSummaryResult,
+  CreateProjectCustomerAnalysisJobResult,
   ProjectMember,
   ProjectMemberAssistantDetail,
+  ProjectCustomerAnalysisJob,
   ProjectDailyReportDetailResult,
   ProjectDailyReportListFilters,
   ProjectDailyReportListResult,
   ProjectDailyReportSettings,
+  ProjectCustomerAnalysisSession,
+  ProjectCustomerAnalysisSessionDetail,
   ProjectReportFilters,
   ProjectReportResult,
   ProjectTopicDetailResult,
@@ -24,7 +29,21 @@
   UserOption,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:3321';
+function resolveApiBaseUrl() {
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+
+  if (configuredBaseUrl) {
+    return configuredBaseUrl;
+  }
+
+  if (import.meta.env.DEV) {
+    return 'http://127.0.0.1:3321';
+  }
+
+  return '/admin-api';
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 type RequestOptions = {
   method?: string;
@@ -354,6 +373,60 @@ export const api = {
   getProjectDailyReportJob: async (actorId: string, projectId: string, jobId: string) =>
     request<{ job: DailyReportJob }>(
       `/api/projects/${projectId}/reports/daily-jobs/${encodeURIComponent(jobId)}`,
+      { actorId },
+    ),
+
+  listProjectCustomerAnalysisSessions: async (actorId: string, projectId: string) =>
+    request<{ sessions: ProjectCustomerAnalysisSession[] }>(
+      `/api/projects/${projectId}/customer-analysis/sessions`,
+      { actorId },
+    ),
+
+  createProjectCustomerAnalysisSession: async (actorId: string, projectId: string, title?: string) =>
+    request<ProjectCustomerAnalysisSessionDetail>(
+      `/api/projects/${projectId}/customer-analysis/sessions`,
+      {
+        method: 'POST',
+        actorId,
+        body: title ? { title } : {},
+      },
+    ),
+
+  getProjectCustomerAnalysisSession: async (actorId: string, projectId: string, sessionId: string) =>
+    request<ProjectCustomerAnalysisSessionDetail>(
+      `/api/projects/${projectId}/customer-analysis/sessions/${encodeURIComponent(sessionId)}`,
+      { actorId },
+    ),
+
+  sendProjectCustomerAnalysisMessage: async (
+    actorId: string,
+    projectId: string,
+    sessionId: string,
+    payload: {
+      prompt: string;
+      rangePreset: CustomerAnalysisRangePreset;
+      dateFrom?: string;
+      dateTo?: string;
+    },
+  ) =>
+    request<CreateProjectCustomerAnalysisJobResult>(
+      `/api/projects/${projectId}/customer-analysis/sessions/${encodeURIComponent(sessionId)}/messages`,
+      {
+        method: 'POST',
+        actorId,
+        body: payload,
+      },
+    ),
+
+  listProjectCustomerAnalysisJobs: async (actorId: string, projectId: string) =>
+    request<{ jobs: ProjectCustomerAnalysisJob[] }>(
+      `/api/projects/${projectId}/customer-analysis/jobs`,
+      { actorId },
+    ),
+
+  getProjectCustomerAnalysisJob: async (actorId: string, projectId: string, jobId: string) =>
+    request<{ job: ProjectCustomerAnalysisJob }>(
+      `/api/projects/${projectId}/customer-analysis/jobs/${encodeURIComponent(jobId)}`,
       { actorId },
     ),
 };
