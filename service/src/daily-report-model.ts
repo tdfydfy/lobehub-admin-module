@@ -40,6 +40,9 @@ type TopicGroupDigest = {
   ownerEmail: string | null;
   intentBand: IntentBand | null;
   intentGrade: string | null;
+  visitType: 'first' | 'revisit' | 'unknown';
+  previousVisitAt: string | null;
+  latestVisitAt: string | null;
   firstMessageAt: string;
   lastMessageAt: string;
   totalMessageCount: number;
@@ -53,6 +56,7 @@ type TopicGroupDigest = {
   mainConcerns: string[];
   managementNeed: string;
   recommendedAction: string;
+  todayUpdateSummary: string;
   actionType: 'inventory_release' | 'pricing_policy' | 'sales_collateral' | 'revisit_campaign' | 'channel_expansion' | 'broker_incentive';
   evidenceMessageIds: string[];
   lastUserMessages: string[];
@@ -275,6 +279,28 @@ function getLastUserMessages(topic: DailyReportSourceTopic) {
     .map((message) => truncateText(message.content, 180));
 }
 
+function getVisitType(topic: DailyReportSourceTopic): TopicGroupDigest['visitType'] {
+  if (topic.lastUserMessageAt) {
+    return topic.previousUserMessageAt ? 'revisit' : 'first';
+  }
+
+  return 'unknown';
+}
+
+function buildTodayUpdateSummary(topic: DailyReportSourceTopic) {
+  const latestMessages = topic.messages.slice(-2).map((message) => truncateText(message.content, 120));
+
+  if (latestMessages.length > 0) {
+    return truncateText(`今天新增的关键信息主要集中在：${latestMessages.join('；')}`, 220);
+  }
+
+  if (topic.previousUserMessageAt) {
+    return '今天有复访轨迹，但未提取到明确的新增关键信息。';
+  }
+
+  return '今天首次形成有效对话，后续需继续补充客户关键信息。';
+}
+
 function buildTopicGroupDigest(
   owner: DailyReportSourceCustomer,
   topic: DailyReportSourceTopic,
@@ -292,6 +318,7 @@ function buildTopicGroupDigest(
   const riskLevel = pickRiskLevel(textSource);
   const actionType = pickActionType(concerns, stage, intentLevel, riskLevel);
   const initialCustomerMessage = getInitialCustomerMessage(topic);
+  const visitType = getVisitType(topic);
   const overallSummary = llmInsight?.summary
     ? truncateText(llmInsight.summary, 220)
     : intentBand
@@ -309,6 +336,9 @@ function buildTopicGroupDigest(
     ownerEmail: owner.email,
     intentBand,
     intentGrade,
+    visitType,
+    previousVisitAt: topic.previousUserMessageAt,
+    latestVisitAt: topic.lastUserMessageAt,
     firstMessageAt: topic.messages[0]?.createdAt ?? topic.createdAt,
     lastMessageAt: topic.messages[topic.messages.length - 1]?.createdAt ?? topic.updatedAt,
     totalMessageCount: topic.messages.length,
@@ -322,6 +352,7 @@ function buildTopicGroupDigest(
     mainConcerns: concerns,
     managementNeed: intentBand ? describeManagementNeed(actionType, concerns) : describeMissingInfoNeed(),
     recommendedAction: intentBand ? describeRecommendedAction(actionType, concerns) : describeMissingInfoAction(),
+    todayUpdateSummary: buildTodayUpdateSummary(topic),
     actionType,
     evidenceMessageIds: userMessages.slice(-3).map((message) => message.id),
     lastUserMessages: getLastUserMessages(topic),
@@ -596,6 +627,9 @@ function mapGroupToSummaryItem(group: TopicGroupDigest) {
     ownerEmail: group.ownerEmail,
     intentBand: group.intentBand,
     intentGrade: group.intentGrade,
+    visitType: group.visitType,
+    previousVisitAt: group.previousVisitAt,
+    latestVisitAt: group.latestVisitAt,
     firstMessageAt: group.firstMessageAt,
     lastMessageAt: group.lastMessageAt,
     totalMessageCount: group.totalMessageCount,
@@ -609,6 +643,7 @@ function mapGroupToSummaryItem(group: TopicGroupDigest) {
     mainConcerns: group.mainConcerns,
     managementNeed: group.managementNeed,
     recommendedAction: group.recommendedAction,
+    todayUpdateSummary: group.todayUpdateSummary,
     evidenceMessageIds: group.evidenceMessageIds,
   };
 }
@@ -630,9 +665,11 @@ function buildFallbackSummary(
   const dIntentGroups = groups.filter((group) => group.intentBand === 'D');
   const highIntentGroups = [...aIntentGroups, ...bIntentGroups];
   const missingIntentGroups = groups.filter((group) => group.intentBand === null);
+  const firstVisitGroups = groups.filter((group) => group.visitType === 'first');
+  const revisitGroups = groups.filter((group) => group.visitType === 'revisit');
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     overview: {
       projectId: source.project.projectId,
       projectName: source.project.projectName,
@@ -645,6 +682,8 @@ function buildFallbackSummary(
     },
     stats: {
       visitedGroupCount: groups.length,
+      firstVisitGroupCount: firstVisitGroups.length,
+      revisitGroupCount: revisitGroups.length,
       aIntentGroupCount: aIntentGroups.length,
       bIntentGroupCount: bIntentGroups.length,
       cIntentGroupCount: cIntentGroups.length,
@@ -695,6 +734,8 @@ function renderMarkdown(summary: DailyReportSummary) {
   lines.push('');
   lines.push('## 核心指标');
   lines.push(`- 来访组数：${summary.stats.visitedGroupCount}`);
+  lines.push(`- 首访组数：${summary.stats.firstVisitGroupCount}`);
+  lines.push(`- 复访组数：${summary.stats.revisitGroupCount}`);
   lines.push(`- A 类客户：${summary.stats.aIntentGroupCount}`);
   lines.push(`- B 类客户：${summary.stats.bIntentGroupCount}`);
   lines.push(`- C 类客户：${summary.stats.cIntentGroupCount}`);
@@ -720,9 +761,11 @@ function renderMarkdown(summary: DailyReportSummary) {
     for (const group of summary.keyCustomerGroups) {
       lines.push(`### ${group.title}`);
       lines.push(`- 销售员：${group.ownerDisplayName}`);
+      lines.push(`- 访问类型：${group.visitType === 'first' ? '首访' : group.visitType === 'revisit' ? '复访' : '待识别'}`);
       lines.push(`- 意向等级：${group.intentGrade ?? group.intentBand ?? '未识别'}`);
       lines.push(`- 主要关注：${group.mainConcerns.join('、')}`);
       lines.push(`- 摘要：${group.overallSummary}`);
+      lines.push(`- 本次新增信息：${group.todayUpdateSummary}`);
       lines.push(`- 管理关注：${group.managementNeed}`);
       lines.push(`- 建议动作：${group.recommendedAction}`);
       lines.push('');
@@ -734,10 +777,12 @@ function renderMarkdown(summary: DailyReportSummary) {
     for (const group of summary.missingInfoCustomers) {
       lines.push(`### ${group.title}`);
       lines.push(`- 销售员：${group.ownerDisplayName}`);
+      lines.push(`- 访问类型：${group.visitType === 'first' ? '首访' : group.visitType === 'revisit' ? '复访' : '待识别'}`);
       if (group.initialCustomerMessage) {
         lines.push(`- 初始描述：${group.initialCustomerMessage}`);
       }
       lines.push(`- 摘要：${group.overallSummary}`);
+      lines.push(`- 本次新增信息：${group.todayUpdateSummary}`);
       lines.push(`- 建议动作：${group.recommendedAction}`);
       lines.push('');
     }

@@ -8,9 +8,53 @@ import { registerDailyReportRoutes } from './routes/daily-reports.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMobileRoutes } from './routes/mobile.js';
+import { registerOverviewRoutes } from './routes/overview.js';
+import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerSystemRoutes } from './routes/system.js';
+
+function normalizeOriginCandidate(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const protocol = parsed.protocol.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
+    const port = parsed.port ? `:${parsed.port}` : '';
+
+    return {
+      exact: `${protocol}//${hostname}${port}`,
+      hostname,
+    };
+  } catch {
+    return {
+      exact: trimmed.toLowerCase(),
+      hostname: trimmed.toLowerCase(),
+    };
+  }
+}
+
+function createAllowedOriginMatcher(origins: string[]) {
+  const normalized = origins
+    .map((origin) => normalizeOriginCandidate(origin))
+    .filter(Boolean) as Array<{ exact: string; hostname: string }>;
+
+  const exactOrigins = new Set(normalized.map((item) => item.exact));
+  const hostnames = new Set(normalized.map((item) => item.hostname));
+
+  return (origin: string) => {
+    const normalizedOrigin = normalizeOriginCandidate(origin);
+
+    if (!normalizedOrigin) return false;
+    if (exactOrigins.has(normalizedOrigin.exact)) return true;
+    if (hostnames.has(normalizedOrigin.hostname)) return true;
+
+    return false;
+  };
+}
 
 function formatValidationMessage(error: ZodError) {
   const messages = error.issues.map((issue) => {
@@ -26,11 +70,12 @@ export async function buildApp() {
     logger: true,
     trustProxy: env.TRUST_PROXY,
   });
+  const isAllowedOrigin = createAllowedOriginMatcher(corsOrigins);
 
   await app.register(cors, {
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     origin: (origin, callback) => {
-      if (!origin || corsOrigins.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -75,7 +120,9 @@ export async function buildApp() {
   await registerHealthRoutes(app);
   await registerSystemRoutes(app);
   await registerDatabaseRoutes(app);
+  await registerPortfolioRoutes(app);
   await registerProjectRoutes(app);
+  await registerOverviewRoutes(app);
   await registerReportRoutes(app);
   await registerDailyReportRoutes(app);
   await registerCustomerAnalysisRoutes(app);

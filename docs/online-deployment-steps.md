@@ -59,6 +59,7 @@
    - [004_repair_project_managed_mappings.sql](/D:/lobe-hub2/lobehub-admin-module/sql/004_repair_project_managed_mappings.sql)
    - [006_daily_reports.sql](/D:/lobe-hub2/lobehub-admin-module/sql/006_daily_reports.sql)
    - [007_daily_report_volcengine_provider.sql](/D:/lobe-hub2/lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql)
+   - [010_project_topic_daily_facts.sql](/D:/lobe-hub2/lobehub-admin-module/sql/010_project_topic_daily_facts.sql)
 
 说明：
 - `001` 是新库全量安装。
@@ -74,7 +75,7 @@
 .\lobehub-admin-module\scripts\upgrade-existing-project-admin.ps1
 ```
 
-当前 `upgrade-existing-project-admin.ps1` 会自动串行执行 `003 / 004 / 006 / 007`。
+当前 `upgrade-existing-project-admin.ps1` 会自动串行执行 `003 / 004 / 006 / 007 / 008 / 009 / 010`。
 
 ## 3. 本地构建
 
@@ -213,7 +214,12 @@ VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 cd /home/admin/lobehub-admin/service
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm install
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm run build
+docker run --rm -it -v "$PWD":/app -w /app --env-file .env node:20 npm run backfill:facts -- --days 10
 ```
+
+说明：
+- 新增 `backfill:facts` 用于回填项目经营事实层。
+- 推荐部署完成后至少回填近 10 天，这样项目组合看板、项目概览和移动端首页都能立刻查看历史业务日。
 
 ## 8. 启动或重启服务
 

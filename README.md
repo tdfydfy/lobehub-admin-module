@@ -1,5 +1,31 @@
 # LobeHub Admin Module
 
+## Update 2026-03-31
+
+- 新增“项目经营事实层”与多项目看板能力：
+  - 新增 `project_topic_daily_facts`
+  - 新增 `project_daily_overview_view`
+  - 新增项目组合看板与单项目经营概览
+  - 支持按 `businessDate` 查看历史业务日
+- 经营口径已收敛为事实层驱动：
+  - `topic = customer`
+  - 来访按有效 `user` 消息判断
+  - 首访 / 复访按首条有效 `user` 消息业务日判断
+  - 待补信息为独立标签，不等于 `C / D`
+- 日报结构升级：
+  - `summary_json.schemaVersion = 3`
+  - 顶部支持首访 / 复访统计
+  - 客户条目支持 `首访 / 复访` 标签与“本次新增信息摘要”
+- 移动端首页概览已向电脑端首页概览对齐：
+  - 首页支持按业务日查看
+  - 顶层优先展示经营核心指标
+- 数据库与脚本新增：
+  - 新增 `sql/010_project_topic_daily_facts.sql`
+  - 服务端新增 `npm run backfill:facts`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009 / 010`
+- 线上状态：
+  - `ali-temp` 已部署并验证多项目看板、项目概览、移动端首页概览与首访 / 复访修正
+
 ## Update 2026-03-27
 
 - 新增“自由盘点”能力：
@@ -10,7 +36,7 @@
 - 数据库与升级脚本已补齐自由盘点结构：
   - 新增 `sql/008_customer_analysis_chat.sql`
   - 新增 `sql/009_customer_analysis_jobs.sql`
-  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009 / 010`
 - 前端生产构建兜底策略已补齐：
   - 默认生产 `base` 回退为 `/admin/`
   - 默认生产 API 地址回退为 `/admin-api`
@@ -49,7 +75,7 @@
 - 数据库与升级脚本已补齐日报相关增量：
   - 新环境的 `sql/001_project_admin_core.sql` 已包含日报表、索引与触发器
   - 已部署旧环境新增 `sql/006_daily_reports.sql` 与 `sql/007_daily_report_volcengine_provider.sql`
-  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009`
+  - `scripts/upgrade-existing-project-admin.ps1` 当前会顺带执行 `003 / 004 / 006 / 007 / 008 / 009 / 010`
 - 日报正文已切到火山 `volcengine` 模型：
   - 使用 `https://ark.cn-beijing.volces.com/api/v3/responses`
   - 当前默认模型为 `doubao-seed-2-0-lite-260215`
@@ -139,12 +165,15 @@
 - 状态总览文档
 - 开发拆解
 - 数据库核心 schema
+- 项目经营事实层与回填脚本
 - 项目级助手配置 SQL
 - 关闭全局自动下发脚本
 - PowerShell 安装脚本
 - 独立后端服务
 - 独立前端管理端
 - 基于现有账号体系的后台登录
+- 项目组合看板
+- 单项目经营概览
 - 项目成员运营报表
 - 项目经营日报
 - 项目对话统计与下钻查看
@@ -164,6 +193,7 @@
 - `sql/007_daily_report_volcengine_provider.sql`：将日报模型 provider 覆盖口径扩展为 `volcengine / fallback`
 - `sql/008_customer_analysis_chat.sql`：已部署环境补齐自由盘点会话与消息表
 - `sql/009_customer_analysis_jobs.sql`：已部署环境补齐自由盘点任务表，支持后台执行与轮询状态
+- `sql/010_project_topic_daily_facts.sql`：已部署环境补齐项目经营事实表与概览视图
 - `scripts/apply-project-admin-core.ps1`：安装核心 schema
 - `scripts/check-project-admin-mappings.ps1`：执行升级前映射健康检查
 - `scripts/upgrade-existing-project-admin.ps1`：执行已部署环境的增量升级
@@ -181,7 +211,7 @@
 3. 已部署旧环境按需执行：
    - 先执行 `scripts/check-project-admin-mappings.ps1`
    - 再执行 `scripts/upgrade-existing-project-admin.ps1`
-   - 当前升级脚本会自动串行执行 `003 / 004 / 006 / 007 / 008 / 009`
+   - 当前升级脚本会自动串行执行 `003 / 004 / 006 / 007 / 008 / 009 / 010`
 4. 启动独立管理端 API
 5. 启动独立管理端 UI
 
@@ -221,6 +251,14 @@
   - 支持项目级日报设置、营业日截点、项目补充要求、模型覆盖
   - 支持手动生成、自动调度、任务轮询、列表查询、详情查看
   - 支持查看结构化 JSON 与 Markdown 原文
+- 项目经营事实层
+  - 支持 `topic = customer` 的经营事实落表
+  - 支持 `npm run backfill:facts`
+  - 支持组合看板与项目概览按业务日查询
+- 项目组合看板与项目概览
+  - 支持系统管理员 / 项目管理员查看项目组合经营概况
+  - 支持单项目经营概览
+  - 支持按业务日查看历史数据
 - 项目自由盘点
   - 支持新建自由盘点会话并保留历史消息
   - 支持按“今日 / 近 7 天 / 近 30 天 / 自定义区间”聚合托管对话
@@ -235,6 +273,9 @@
   - 项目管理员可查看 `crm`
   - 项目管理员仅能看到 `project = 自己所在项目名称` 的数据
 - 前端时间默认按东八区显示
+- 移动端首页概览
+  - 内容已与电脑端首页概览对齐
+  - 支持按业务日查看
 
 当前不包含：
 - 独立登录系统

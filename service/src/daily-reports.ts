@@ -46,6 +46,13 @@ type DailyReportSourceMessageRow = {
   message_created_at: string;
 };
 
+type DailyReportTopicHistoryRow = {
+  topic_id: string;
+  first_user_message_at: string | null;
+  previous_user_message_at: string | null;
+  last_user_message_at: string | null;
+};
+
 type DailyReportListRow = {
   id: string;
   business_date: string;
@@ -572,6 +579,34 @@ export async function collectProjectDailyReportSource(projectId: string, window:
     [projectId, window.startAt, window.endAt],
   );
 
+  const topicIds = [...new Set(result.rows.map((row) => row.topic_id))];
+  const historyResult = topicIds.length > 0
+    ? await query<DailyReportTopicHistoryRow>(
+      `
+      select
+        m.topic_id,
+        min(m.created_at) as first_user_message_at,
+        max(m.created_at) filter (where m.created_at < $2::timestamptz) as previous_user_message_at,
+        max(m.created_at) filter (
+          where m.created_at >= $2::timestamptz
+            and m.created_at < $3::timestamptz
+        ) as last_user_message_at
+      from public.messages m
+      where m.topic_id = any($1::text[])
+        and m.created_at < $3::timestamptz
+        and m.role = 'user'
+        and (
+          length(trim(coalesce(m.content, ''))) > 0
+          or length(trim(coalesce(m.summary, ''))) > 0
+          or m.editor_data is not null
+        )
+      group by m.topic_id
+      `,
+      [topicIds, window.startAt, window.endAt],
+    )
+    : { rows: [] as DailyReportTopicHistoryRow[] };
+  const historyByTopicId = new Map(historyResult.rows.map((row) => [row.topic_id, row]));
+
   const customerMap = new Map<string, DailyReportSourceCustomer>();
   let activeTopicCount = 0;
   let totalMessageCount = 0;
@@ -599,11 +634,15 @@ export async function collectProjectDailyReportSource(projectId: string, window:
 
     let topic = customer.topics.find((item) => item.topicId === row.topic_id);
     if (!topic) {
+      const history = historyByTopicId.get(row.topic_id);
       topic = {
         topicId: row.topic_id,
         title: row.topic_title,
         createdAt: toIsoTimestamp(row.topic_created_at),
         updatedAt: toIsoTimestamp(row.topic_updated_at),
+        firstUserMessageAt: history?.first_user_message_at ? toIsoTimestamp(history.first_user_message_at) : null,
+        previousUserMessageAt: history?.previous_user_message_at ? toIsoTimestamp(history.previous_user_message_at) : null,
+        lastUserMessageAt: history?.last_user_message_at ? toIsoTimestamp(history.last_user_message_at) : null,
         messages: [],
       };
       customer.topics.push(topic);

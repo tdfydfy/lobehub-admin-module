@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const DAILY_REPORT_PROMPT_VERSION = 'daily-report-v2';
+export const DAILY_REPORT_PROMPT_VERSION = 'daily-report-v3';
 
 export type DailyReportWindow = {
   businessDate: string;
@@ -44,6 +44,9 @@ export type DailyReportSourceTopic = {
   title: string;
   createdAt: string;
   updatedAt: string;
+  firstUserMessageAt: string | null;
+  previousUserMessageAt: string | null;
+  lastUserMessageAt: string | null;
   messages: DailyReportSourceMessage[];
 };
 
@@ -83,6 +86,9 @@ const keyCustomerGroupSchema = z.object({
   ownerEmail: z.string().trim().email().nullable(),
   intentBand: z.enum(['A', 'B', 'C', 'D']).nullable(),
   intentGrade: z.string().trim().min(1).max(20).nullable(),
+  visitType: z.enum(['first', 'revisit', 'unknown']),
+  previousVisitAt: z.string().trim().min(1).nullable(),
+  latestVisitAt: z.string().trim().min(1).nullable(),
   firstMessageAt: z.string().trim().min(1),
   lastMessageAt: z.string().trim().min(1),
   totalMessageCount: z.number().int().min(0),
@@ -96,6 +102,7 @@ const keyCustomerGroupSchema = z.object({
   mainConcerns: z.array(concernLabelSchema).max(8),
   managementNeed: z.string().trim().min(1).max(240),
   recommendedAction: z.string().trim().min(1).max(240),
+  todayUpdateSummary: z.string().trim().min(1).max(300),
   evidenceMessageIds: z.array(z.string().trim().min(1)).max(20),
 });
 
@@ -130,7 +137,7 @@ const managementActionSchema = z.object({
 });
 
 export const dailyReportSummarySchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   overview: z.object({
     projectId: z.string().trim().min(1),
     projectName: z.string().trim().min(1),
@@ -143,6 +150,8 @@ export const dailyReportSummarySchema = z.object({
   }),
   stats: z.object({
     visitedGroupCount: z.number().int().min(0),
+    firstVisitGroupCount: z.number().int().min(0),
+    revisitGroupCount: z.number().int().min(0),
     aIntentGroupCount: z.number().int().min(0),
     bIntentGroupCount: z.number().int().min(0),
     cIntentGroupCount: z.number().int().min(0),

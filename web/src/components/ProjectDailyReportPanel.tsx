@@ -134,6 +134,13 @@ function getIntentGradeLabel(item: Record<string, unknown>) {
   return '信息不足';
 }
 
+function getVisitTypeLabel(item: Record<string, unknown>) {
+  const visitType = readString(item, 'visitType');
+  if (visitType === 'first') return '首访';
+  if (visitType === 'revisit') return '复访';
+  return '待识别';
+}
+
 function renderCustomerCards(
   items: Array<Record<string, unknown>>,
   onOpenTopic: (topicId: string) => void,
@@ -165,9 +172,11 @@ function renderCustomerCards(
             </div>
             <div className="report-pill-row">
               <span className="report-pill active">{getIntentGradeLabel(item)}</span>
+              <span className="report-pill">{getVisitTypeLabel(item)}</span>
               <span className="report-pill">销售 {owner}</span>
               {lastMessageAt ? <span className="report-pill">最近活跃 {formatTime(lastMessageAt)}</span> : null}
             </div>
+            {readString(item, 'todayUpdateSummary') ? <p className="muted">本次新增信息：{readString(item, 'todayUpdateSummary')}</p> : null}
             {mode === 'missing' && readString(item, 'initialCustomerMessage') ? (
               <p className="muted">初始描述：{readString(item, 'initialCustomerMessage')}</p>
             ) : null}
@@ -406,7 +415,7 @@ export function ProjectDailyReportPanel({
     if (schemaVersion >= 2) {
       const parts = [
         readString(summaryOverview, 'executiveSummary'),
-        `今天一共来访 ${readNumber(summaryStats, 'visitedGroupCount')} 组，其中 A 类 ${readNumber(summaryStats, 'aIntentGroupCount')} 组，B 类 ${readNumber(summaryStats, 'bIntentGroupCount')} 组，信息不足 ${readNumber(summaryStats, 'missingIntentGroupCount')} 组。`,
+        `今天一共来访 ${readNumber(summaryStats, 'visitedGroupCount')} 组，其中首访 ${readNumber(summaryStats, 'firstVisitGroupCount')} 组，复访 ${readNumber(summaryStats, 'revisitGroupCount')} 组，A 类 ${readNumber(summaryStats, 'aIntentGroupCount')} 组，B 类 ${readNumber(summaryStats, 'bIntentGroupCount')} 组，信息不足 ${readNumber(summaryStats, 'missingIntentGroupCount')} 组。`,
       ];
       const topConcerns = commonConcerns.slice(0, 4).map((item) => readString(item, 'label')).filter(Boolean).join('、');
       const focusItems = managementFocus.slice(0, 3).map((item) => readString(item, 'title')).filter(Boolean).join('；');
@@ -593,9 +602,9 @@ export function ProjectDailyReportPanel({
             <div className="daily-report-detail">
               <div className="stats-grid report-stats-grid">
                 <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '来访组数' : '来访客户'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'visitedGroupCount') : reportDetail.visitedCustomerCount}</strong><small className="stat-meta">营业日 {reportDetail.businessDate}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? 'A/B 高意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'highIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '信息不足' : '客户消息'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'missingIntentGroupCount') : reportDetail.userMessageCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `C类 ${readNumber(summaryStats, 'cIntentGroupCount')} / D类 ${readNumber(summaryStats, 'dIntentGroupCount')}` : `助手消息 ${reportDetail.assistantMessageCount}`}</small></article>
-                <article className="stat-card"><span className="stat-label">模型</span><strong className="stat-value topic-stat-time">{reportDetail.modelName}</strong><small className="stat-meta">{reportDetail.modelProvider}</small></article>
+                <article className="stat-card"><span className="stat-label">{schemaVersion >= 3 ? '首访 / 复访' : schemaVersion >= 2 ? 'A/B 高意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 3 ? `${readNumber(summaryStats, 'firstVisitGroupCount')} / ${readNumber(summaryStats, 'revisitGroupCount')}` : schemaVersion >= 2 ? readNumber(summaryStats, 'highIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 3 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : schemaVersion >= 2 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
+                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '中低意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'cIntentGroupCount') + readNumber(summaryStats, 'dIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `C类 ${readNumber(summaryStats, 'cIntentGroupCount')} / D类 ${readNumber(summaryStats, 'dIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
+                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '待补信息' : '客户消息'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'missingIntentGroupCount') : reportDetail.userMessageCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? '独立标签，不等于 C/D' : `助手消息 ${reportDetail.assistantMessageCount}`}</small></article>
               </div>
 
               <div className="daily-report-summary-card">
@@ -605,6 +614,7 @@ export function ProjectDailyReportPanel({
                 <div className="report-pill-row">
                   <span className="report-pill active">窗口 {formatTime(reportDetail.windowStartAt)} ~ {formatTime(reportDetail.windowEndAt)}</span>
                   {schemaVersion >= 2 ? <span className="report-pill">A/B {readNumber(summaryStats, 'highIntentGroupCount')}</span> : null}
+                  {schemaVersion >= 3 ? <span className="report-pill">首访 {readNumber(summaryStats, 'firstVisitGroupCount')} / 复访 {readNumber(summaryStats, 'revisitGroupCount')}</span> : null}
                   {schemaVersion >= 2 ? <span className="report-pill">信息不足 {readNumber(summaryStats, 'missingIntentGroupCount')}</span> : null}
                   <span className="report-pill">系统提示词版本 {reportDetail.systemPromptVersion}</span>
                 </div>

@@ -41,6 +41,7 @@
 - `lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql`
 - `lobehub-admin-module/sql/008_customer_analysis_chat.sql`
 - `lobehub-admin-module/sql/009_customer_analysis_jobs.sql`
+- `lobehub-admin-module/sql/010_project_topic_daily_facts.sql`
 
 本地 Docker `postgres` 环境优先使用：
 
@@ -58,6 +59,7 @@
 - `007` 用于将日报模型 provider 的约束修正为 `volcengine / fallback`。
 - `008` 用于补齐自由盘点会话与消息表。
 - `009` 用于补齐自由盘点任务表，支持提交任务后后台执行与轮询状态。
+- `010` 用于补齐项目经营事实表 `project_topic_daily_facts` 与 `project_daily_overview_view`。
 
 如果需要单独执行某一份 SQL，再回退使用：
 
@@ -68,6 +70,7 @@
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/007_daily_report_volcengine_provider.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/008_customer_analysis_chat.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/009_customer_analysis_jobs.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/010_project_topic_daily_facts.sql"
 ```
 
 ### 2.2 如需关闭旧的全局自动下发
@@ -139,6 +142,7 @@ http://127.0.0.1:3321
 - 服务进程启动时会自动恢复未完成的日报任务。
 - 服务进程启动时也会自动恢复未完成的自由盘点任务。
 - 服务进程会每 60 秒扫描一次已启用项目的日报到点情况。
+- 服务端已支持项目组合看板、单项目经营概览与按 `businessDate` 的历史业务日查询。
 - 如果未显式设置 `DAILY_REPORT_DEFAULT_MODEL_PROVIDER`，但配置了 `VOLCENGINE_API_KEY`，当前会默认走 `volcengine`；否则回退为内建摘要器。
 
 ## 3.1 当前线上实际运行方式
@@ -161,7 +165,12 @@ cd /home/admin/lobehub-admin/service
 cp .env.production .env
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm install
 docker run --rm -it -v "$PWD":/app -w /app node:20 npm run build
+docker run --rm -it -v "$PWD":/app -w /app --env-file .env node:20 npm run backfill:facts -- --days 10
 ```
+
+补充说明：
+- `npm run backfill:facts` 用于回填项目经营事实层。
+- 推荐至少回填近 7 到 10 天，保证组合看板、项目概览和移动端首页一上线就能看到历史业务日。
 
 正式运行由 Docker compose 网关栈接管，见：
 

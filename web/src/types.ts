@@ -28,6 +28,140 @@ export type ProjectSummary = {
   actor_role?: 'system_admin' | 'admin' | 'member';
 };
 
+export type PortfolioSummary = {
+  projectCount: number;
+  visitCustomerCount: number;
+  firstVisitCount: number;
+  revisitCount: number;
+  newTopicCount: number;
+  activeTopicCount: number;
+  activeMemberCount: number;
+  cIntentCount: number;
+  dIntentCount: number;
+  lowMediumIntentCount: number;
+  highIntentCount: number;
+  missingIntentCount: number;
+  runningJobCount: number;
+  failedJobCount: number;
+};
+
+export type PortfolioProjectRow = {
+  projectId: string;
+  projectName: string;
+  description: string | null;
+  actorRole: 'system_admin' | 'admin';
+  adminCount: number;
+  memberCount: number;
+  managedMemberCount: number;
+  businessDate: string | null;
+  newTopicCount: number;
+  activeTopicCount: number;
+  visitCustomerCount: number;
+  firstVisitCount: number;
+  revisitCount: number;
+  activeMemberCount: number;
+  aIntentCount: number;
+  bIntentCount: number;
+  cIntentCount: number;
+  dIntentCount: number;
+  lowMediumIntentCount: number;
+  highIntentCount: number;
+  missingIntentCount: number;
+  latestReportBusinessDate: string | null;
+  latestReportGeneratedAt: string | null;
+  runningJobCount: number;
+  failedJobCount: number;
+};
+
+export type PortfolioProjectsResult = {
+  rows: PortfolioProjectRow[];
+};
+
+export type PortfolioSummaryResult = {
+  summary: PortfolioSummary;
+};
+
+export type ProjectOverviewResult = {
+  overview: {
+    project: {
+      projectId: string;
+      projectName: string;
+      description: string | null;
+      timezone: string;
+      closeTimeLocal: string;
+      businessDate: string;
+      windowStartAt: string;
+      windowEndAt: string;
+      isPartial: boolean;
+    };
+    stats: {
+      newTopicCount: number;
+      activeTopicCount: number;
+      visitCustomerCount: number;
+      firstVisitCount: number;
+      revisitCount: number;
+      activeMemberCount: number;
+      visibleMessageCount: number;
+      userMessageCount: number;
+      assistantMessageCount: number;
+      aIntentCount: number;
+      bIntentCount: number;
+      cIntentCount: number;
+      dIntentCount: number;
+      highIntentCount: number;
+      missingIntentCount: number;
+      lastActiveAt: string | null;
+    };
+    members: {
+      totalMembers: number;
+      adminCount: number;
+      memberCount: number;
+      managedMemberCount: number;
+      failedMemberCount: number;
+      pendingMemberCount: number;
+    };
+    trend: Array<{
+      businessDate: string;
+      newTopicCount: number;
+      activeTopicCount: number;
+      visitCustomerCount: number;
+      firstVisitCount: number;
+      revisitCount: number;
+      aIntentCount: number;
+      bIntentCount: number;
+      highIntentCount: number;
+      missingIntentCount: number;
+    }>;
+    attentionTopics: Array<{
+      topicId: string;
+      title: string;
+      ownerUserId: string;
+      ownerDisplayName: string;
+      ownerEmail: string | null;
+      visitType: 'first' | 'revisit' | 'unknown';
+      previousVisitAt: string | null;
+      latestVisitAt: string | null;
+      lastActiveAt: string | null;
+      visibleMessageCount: number;
+      userMessageCount: number;
+      assistantMessageCount: number;
+      latestIntentBand: 'A' | 'B' | 'C' | 'D' | null;
+      latestIntentGrade: string | null;
+    }>;
+    attentionMembers: Array<{
+      userId: string;
+      displayName: string;
+      email: string | null;
+      activeTopicCount: number;
+      visitCustomerCount: number;
+      revisitCount: number;
+      lastActiveAt: string | null;
+    }>;
+    latestReport: ProjectDailyReportListItem | null;
+    runningJob: DailyReportJob | null;
+  };
+};
+
 export type ProjectMember = {
   userId: string;
   role: 'admin' | 'member';

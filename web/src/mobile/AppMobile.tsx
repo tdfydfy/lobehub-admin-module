@@ -9,6 +9,7 @@ import type {
   JobDetail,
   JobItem,
   MobileProjectSummaryResult,
+  ProjectOverviewResult,
   ProjectDailyReportDetail,
   ProjectDailyReportListResult,
   ProjectDailyReportSettings,
@@ -122,6 +123,14 @@ function createDefaultDailySettingsDraft(): DailySettingsDraft {
     modelProviderOverride: '',
     modelNameOverride: '',
   };
+}
+
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeTopicFilters(filters: TopicFilterState): ProjectTopicStatsFilters {
@@ -326,18 +335,21 @@ function getIntentGradeLabel(item: Record<string, unknown>) {
 
 function normalizeDailyStats(detail: ProjectDailyReportDetail | null, overview: ReturnType<typeof getDailyOverview>) {
   const stats = overview.stats;
-  const aCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'A').length;
-  const bCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'B').length;
-  const cCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'C').length;
-  const dCount = overview.keyCustomerGroups.filter((item) => getIntentBand(item) === 'D').length;
+  const aCount = readNumber(stats, 'aIntentGroupCount');
+  const bCount = readNumber(stats, 'bIntentGroupCount');
+  const cCount = readNumber(stats, 'cIntentGroupCount');
+  const dCount = readNumber(stats, 'dIntentGroupCount');
   const highIntentCount = aCount + bCount;
   const lowMediumIntentCount = cCount + dCount;
-  const visitedCount = readNumber(stats, 'visitedGroupCount') || detail?.visitedCustomerCount || overview.keyCustomerGroups.length;
-  const derivedMissingCount = Math.max(visitedCount - highIntentCount - lowMediumIntentCount, 0);
-  const missingCount = Math.max(overview.missingInfoCustomers.length, derivedMissingCount);
+  const visitedCount = readNumber(stats, 'visitedGroupCount') || detail?.visitedCustomerCount || 0;
+  const missingCount = readNumber(stats, 'missingIntentGroupCount') || overview.missingInfoCustomers.length;
+  const firstVisitCount = readNumber(stats, 'firstVisitGroupCount');
+  const revisitCount = readNumber(stats, 'revisitGroupCount');
 
   return {
     visitedCount,
+    firstVisitCount,
+    revisitCount,
     aCount,
     bCount,
     cCount,
@@ -358,7 +370,7 @@ function buildOverviewLead(executiveSummary: string) {
 }
 
 function buildMobileDailyHeadline(normalizedStats: ReturnType<typeof normalizeDailyStats>) {
-  return '今日来访 ' + normalizedStats.visitedCount + ' 组，中高意向 ' + normalizedStats.highIntentCount + ' 组，中低意向 ' + normalizedStats.lowMediumIntentCount + ' 组，待补信息 ' + normalizedStats.missingCount + ' 组';
+  return '今日来访 ' + normalizedStats.visitedCount + ' 组，首访 ' + normalizedStats.firstVisitCount + ' 组，复访 ' + normalizedStats.revisitCount + ' 组，中高意向 ' + normalizedStats.highIntentCount + ' 组，中低意向 ' + normalizedStats.lowMediumIntentCount + ' 组，待补信息 ' + normalizedStats.missingCount + ' 组';
 }
 
 function formatPriorityLabel(priority: string) {
@@ -834,6 +846,8 @@ function MobileOverviewPage({
 }) {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<MobileProjectSummaryResult | null>(null);
+  const [overview, setOverview] = useState<ProjectOverviewResult['overview'] | null>(null);
+  const [businessDate, setBusinessDate] = useState(getTodayDateString());
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -843,9 +857,13 @@ function MobileOverviewPage({
       setLoading(true);
 
       try {
-        const result = await api.getMobileProjectSummary(actorId, project.id);
+        const [summaryResult, overviewResult] = await Promise.all([
+          api.getMobileProjectSummary(actorId, project.id),
+          projectRole !== 'member' ? api.getProjectOverview(actorId, project.id, businessDate) : Promise.resolve(null),
+        ]);
         if (cancelled) return;
-        setSummary(result);
+        setSummary(summaryResult);
+        setOverview(overviewResult?.overview ?? null);
       } catch (error) {
         if (!cancelled) onFeedback((error as Error).message, 'danger');
       } finally {
@@ -858,15 +876,15 @@ function MobileOverviewPage({
     return () => {
       cancelled = true;
     };
-  }, [actorId, project.id, projectRole, refreshKey, onFeedback]);
+  }, [actorId, project.id, projectRole, businessDate, refreshKey, onFeedback]);
 
   const memberSummary = summary?.members ?? null;
-  const provisionSummary = summary?.provision ?? null;
   const topicSummary = summary?.topics ?? null;
   const dailySummary = summary?.daily ?? null;
   const latestDailyReport = dailySummary?.latestReport ?? null;
-  const runningDailyJob = dailySummary?.runningJob ?? null;
-  const activeTopicRows = topicSummary?.rows.slice(0, 3) ?? [];
+  const desktopLikeStats = overview?.stats ?? null;
+  const attentionTopics = overview?.attentionTopics ?? [];
+  const attentionMembers = overview?.attentionMembers ?? [];
 
   return (
     <div className="mobile-page">
@@ -886,6 +904,7 @@ function MobileOverviewPage({
           <span className="mobile-chip">管理员 {project.adminCount}</span>
           <span className="mobile-chip">成员 {project.memberCount}</span>
           <span className="mobile-chip">更新 {formatTime(project.updatedAt)}</span>
+          {overview?.project.businessDate ? <span className="mobile-chip">业务日 {overview.project.businessDate}</span> : null}
         </div>
       </div>
 
@@ -893,31 +912,56 @@ function MobileOverviewPage({
 
       {projectRole !== 'member' ? (
         <>
+          <div className="mobile-card soft">
+            <div className="mobile-section-head">
+              <div>
+                <p className="mobile-eyebrow">Business Date</p>
+                <h3>查看历史业务日</h3>
+              </div>
+            </div>
+            <div className="mobile-action-row">
+              <label className="mobile-field date-field">
+                <span>业务日</span>
+                <input type="date" value={businessDate} onChange={(event) => setBusinessDate(event.target.value)} />
+              </label>
+              <button className="mobile-button ghost" type="button" onClick={() => setBusinessDate(getTodayDateString())}>
+                回到今日
+              </button>
+            </div>
+          </div>
+
           <div className="mobile-grid overview-summary-grid">
             <SummaryCard
-              label="成员"
-              value={memberSummary?.totalMembers ?? 0}
-              meta={`异常 ${memberSummary?.pendingMemberCount ?? 0} / 失败 ${memberSummary?.failedMemberCount ?? 0}`}
-              onClick={() => onOpenPage('members')}
-            />
-            <SummaryCard
-              label="分配"
-              value={provisionSummary?.template?.template_agent_title ?? '未配置'}
-              meta={provisionSummary?.latestJob ? getProvisionStatusLabel(provisionSummary.latestJob.status) : '暂无任务'}
-              onClick={() => onOpenPage('provision')}
-            />
-            <SummaryCard
-              label="对话"
-              value={topicSummary?.summary.activeMemberCount ?? 0}
-              meta={`今日 topic ${topicSummary?.summary.totalTopics ?? 0}`}
-              onClick={() => onOpenPage('topics')}
-            />
-            <SummaryCard
-              label="日报"
-              value={latestDailyReport?.businessDate ?? '暂无'}
-              meta={runningDailyJob ? getDailyJobStatusLabel(runningDailyJob.status) : (latestDailyReport ? `模型 ${latestDailyReport.modelName}` : '未生成')}
+              label="今日来访"
+              value={desktopLikeStats?.visitCustomerCount ?? 0}
+              meta={`首访 ${desktopLikeStats?.firstVisitCount ?? 0} / 复访 ${desktopLikeStats?.revisitCount ?? 0}`}
               onClick={() => onOpenPage('daily')}
             />
+            <SummaryCard
+              label="高意向"
+              value={desktopLikeStats?.highIntentCount ?? 0}
+              meta={`A ${desktopLikeStats?.aIntentCount ?? 0} / B ${desktopLikeStats?.bIntentCount ?? 0}`}
+              onClick={() => onOpenPage('daily')}
+            />
+            <SummaryCard
+              label="中低意向"
+              value={(desktopLikeStats?.cIntentCount ?? 0) + (desktopLikeStats?.dIntentCount ?? 0)}
+              meta={`C ${desktopLikeStats?.cIntentCount ?? 0} / D ${desktopLikeStats?.dIntentCount ?? 0}`}
+              onClick={() => onOpenPage('daily')}
+            />
+            <SummaryCard
+              label="待补信息"
+              value={desktopLikeStats?.missingIntentCount ?? 0}
+              meta="独立标签"
+              onClick={() => onOpenPage('daily')}
+            />
+          </div>
+
+          <div className="mobile-chip-row">
+            <span className="mobile-chip">新增对话 {desktopLikeStats?.newTopicCount ?? 0}</span>
+            <span className="mobile-chip">活跃对话 {desktopLikeStats?.activeTopicCount ?? 0}</span>
+            <span className="mobile-chip">活跃成员 {desktopLikeStats?.activeMemberCount ?? 0}</span>
+            <span className="mobile-chip">总成员 {memberSummary?.totalMembers ?? 0}</span>
           </div>
 
           <div className="mobile-card">
@@ -946,6 +990,67 @@ function MobileOverviewPage({
           <div className="mobile-card">
             <div className="mobile-section-head">
               <div>
+                <p className="mobile-eyebrow">Priority</p>
+                <h3>今日重点客户组</h3>
+              </div>
+              <button className="mobile-button ghost" type="button" onClick={() => onOpenPage('daily')}>
+                查看日报
+              </button>
+            </div>
+            {attentionTopics.length > 0 ? (
+              <div className="mobile-stack">
+                {attentionTopics.slice(0, 3).map((item) => (
+                  <div key={item.topicId} className="mobile-inline-card">
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.ownerDisplayName}</p>
+                    </div>
+                    <div className="mobile-list-meta">
+                      <span>{item.latestIntentGrade ?? item.latestIntentBand ?? '待补信息'}</span>
+                      <span>{item.visitType === 'first' ? '首访' : item.visitType === 'revisit' ? '复访' : '待识别'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mobile-muted">当前窗口内暂无重点客户组。</p>
+            )}
+          </div>
+
+          <div className="mobile-card">
+            <div className="mobile-section-head">
+              <div>
+                <p className="mobile-eyebrow">Attention Members</p>
+                <h3>今日活跃成员</h3>
+              </div>
+              <button className="mobile-button ghost" type="button" onClick={() => onOpenPage('members')}>
+                查看成员
+              </button>
+            </div>
+            {attentionMembers.length > 0 ? (
+              <div className="mobile-stack">
+                {attentionMembers.slice(0, 3).map((row) => (
+                  <div key={row.userId} className="mobile-inline-card">
+                    <div>
+                      <strong>{row.displayName}</strong>
+                      <p>{row.email ?? row.userId}</p>
+                    </div>
+                    <div className="mobile-list-meta">
+                      <span>活跃 {row.activeTopicCount}</span>
+                      <span>来访 {row.visitCustomerCount}</span>
+                      <span>复访 {row.revisitCount}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mobile-muted">当前窗口内暂无活跃成员。</p>
+            )}
+          </div>
+
+          <div className="mobile-card">
+            <div className="mobile-section-head">
+              <div>
                 <p className="mobile-eyebrow">Latest Daily</p>
                 <h3>最新日报</h3>
               </div>
@@ -956,73 +1061,13 @@ function MobileOverviewPage({
             {latestDailyReport ? (
               <button type="button" className="mobile-list-button" onClick={() => onOpenDailyDetail(latestDailyReport.reportId)}>
                 <div className="mobile-stack">
-                <strong>{latestDailyReport.businessDate}</strong>
-                <p className="mobile-muted">来访 {latestDailyReport.visitedCustomerCount} / topic {latestDailyReport.activeTopicCount} / 模型 {latestDailyReport.modelName}</p>
-                <p className="mobile-muted">生成于 {formatTime(latestDailyReport.generatedAt)}</p>
+                  <strong>{latestDailyReport.businessDate}</strong>
+                  <p className="mobile-muted">来访 {latestDailyReport.visitedCustomerCount} / 活跃对话 {latestDailyReport.activeTopicCount}</p>
+                  <p className="mobile-muted">生成于 {formatTime(latestDailyReport.generatedAt)}</p>
                 </div>
               </button>
             ) : (
               <p className="mobile-muted">当前还没有生成日报。</p>
-            )}
-          </div>
-
-          <div className="mobile-card">
-            <div className="mobile-section-head">
-              <div>
-                <p className="mobile-eyebrow">Active Topics</p>
-                <h3>今日活跃对话</h3>
-              </div>
-              <button className="mobile-button ghost" type="button" onClick={() => onOpenPage('topics')}>
-                查看全部
-              </button>
-            </div>
-            {activeTopicRows.length > 0 ? (
-              <div className="mobile-stack">
-                {activeTopicRows.map((row) => (
-                  <div key={row.userId} className="mobile-inline-card">
-                    <div>
-                      <strong>{row.displayName}</strong>
-                      <p>{row.managedSessionTitle ?? '未配置托管会话'}</p>
-                    </div>
-                    <div className="mobile-list-meta">
-                      <span>topic {row.topicCount}</span>
-                      <span>{formatTime(row.lastTopicAt)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mobile-muted">今日还没有活跃对话。</p>
-            )}
-          </div>
-
-          <div className="mobile-card">
-            <div className="mobile-section-head">
-              <div>
-                <p className="mobile-eyebrow">Needs Attention</p>
-                <h3>待处理成员</h3>
-              </div>
-              <button className="mobile-button ghost" type="button" onClick={() => onOpenPage('members')}>
-                去处理
-              </button>
-            </div>
-            {(memberSummary?.attentionMembers.length ?? 0) > 0 ? (
-              <div className="mobile-stack">
-                {memberSummary?.attentionMembers.map((member) => (
-                  <div key={member.userId} className="mobile-inline-card">
-                    <div>
-                      <strong>{member.displayName}</strong>
-                      <p>{member.email ?? member.userId}</p>
-                    </div>
-                    <div className="mobile-list-meta">
-                      <span>{member.managedStatus === 'failed' ? '分配失败' : member.managedStatus === 'skipped' ? '已跳过' : '未分配'}</span>
-                      <span>{formatTime(member.updatedAt)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mobile-muted">所有成员当前状态正常。</p>
             )}
           </div>
         </>
@@ -2196,10 +2241,9 @@ function MobileDailyPage({
           <button type="button" className="mobile-list-button active" onClick={() => onOpenDetail(latestReport.reportId)}>
             <div>
               <strong>{latestReport.businessDate}</strong>
-              <p>来访 {latestReport.visitedCustomerCount} / topic {latestReport.activeTopicCount}</p>
+              <p>来访 {latestReport.visitedCustomerCount} / 活跃对话 {latestReport.activeTopicCount}</p>
             </div>
             <div className="mobile-list-meta">
-              <span>{latestReport.modelName}</span>
               <span>{formatTime(latestReport.generatedAt)}</span>
             </div>
           </button>
@@ -2224,7 +2268,6 @@ function MobileDailyPage({
                   <p>版本 {item.revision} · 来访 {item.visitedCustomerCount}</p>
                 </div>
                 <div className="mobile-list-meta">
-                  <span>{item.modelName}</span>
                   <span>{formatTime(item.generatedAt)}</span>
                 </div>
               </button>
@@ -2344,9 +2387,11 @@ function MobileDailyDetailPage({
 
           <div className="mobile-grid daily-summary-grid">
             <SummaryCard label="今日来访" value={normalizedStats.visitedCount} meta="" stacked />
+            <SummaryCard label="首访" value={normalizedStats.firstVisitCount} meta="" stacked />
+            <SummaryCard label="复访" value={normalizedStats.revisitCount} meta="" stacked />
             <SummaryCard label={'中高意向'} value={normalizedStats.highIntentCount} meta={'A类 ' + normalizedStats.aCount + '\n' + 'B类 ' + normalizedStats.bCount} stacked />
             <SummaryCard label={'中低意向'} value={normalizedStats.lowMediumIntentCount} meta={'C类 ' + normalizedStats.cCount + '\n' + 'D类 ' + normalizedStats.dCount} stacked />
-            <SummaryCard label="待补信息" value={normalizedStats.missingCount} meta="" stacked />
+            <SummaryCard label="待补信息" value={normalizedStats.missingCount} meta={'独立标签'} stacked />
           </div>
 
           {overview.keyCustomerGroups.length > 0 ? (

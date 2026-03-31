@@ -8,6 +8,8 @@
   JobItem,
   DailyReportJob,
   MobileProjectSummaryResult,
+  PortfolioProjectsResult,
+  PortfolioSummaryResult,
   CreateProjectCustomerAnalysisJobResult,
   ProjectMember,
   ProjectMemberAssistantDetail,
@@ -24,6 +26,7 @@
   ProjectTopicStatsFilters,
   ProjectTopicListResult,
   ProjectTopicStatsResult,
+  ProjectOverviewResult,
   ProjectSummary,
   ProjectTemplate,
   UserOption,
@@ -163,6 +166,16 @@ export const api = {
       actorId,
     }),
 
+  getPortfolioSummary: async (actorId: string, businessDate?: string) =>
+    request<PortfolioSummaryResult>(`/api/portfolio/summary${buildQueryString({ businessDate })}`, {
+      actorId,
+    }),
+
+  getPortfolioProjects: async (actorId: string, businessDate?: string) =>
+    request<PortfolioProjectsResult>(`/api/portfolio/projects${buildQueryString({ businessDate })}`, {
+      actorId,
+    }),
+
   listProjects: async (actorId: string) =>
     request<{ projects: ProjectSummary[] }>('/api/projects', {
       actorId,
@@ -183,6 +196,11 @@ export const api = {
 
   getProject: async (actorId: string, projectId: string) =>
     request<{ project: ProjectSummary | null }>(`/api/projects/${projectId}`, {
+      actorId,
+    }),
+
+  getProjectOverview: async (actorId: string, projectId: string, businessDate?: string) =>
+    request<ProjectOverviewResult>(`/api/projects/${projectId}/overview${buildQueryString({ businessDate })}`, {
       actorId,
     }),
 

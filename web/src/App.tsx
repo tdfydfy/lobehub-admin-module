@@ -2,6 +2,8 @@
 import { Fragment, useEffect, useState } from 'react';
 import { ProjectCustomerAnalysisPanel } from './components/ProjectCustomerAnalysisPanel';
 import { ProjectDailyReportPanel } from './components/ProjectDailyReportPanel';
+import { ProjectOverviewPanel } from './components/ProjectOverviewPanel';
+import { ProjectPortfolioPanel } from './components/ProjectPortfolioPanel';
 import { formatTimeToShanghai } from './lib/time';
 import { ProjectReportPanel } from './components/ProjectReportPanel';
 import { ProjectTopicStatsPanel } from './components/ProjectTopicStatsPanel';
@@ -19,7 +21,7 @@ import type {
   UserOption,
 } from './types';
 
-type TabKey = 'members' | 'assistant' | 'data' | 'daily' | 'analysis' | 'topic' | 'browser';
+type TabKey = 'overview' | 'members' | 'assistant' | 'data' | 'daily' | 'analysis' | 'topic' | 'browser';
 type PortalMode = 'system' | 'workspace' | 'member' | 'empty';
 type WorkbenchMode = 'system' | 'workspace' | 'member';
 type SystemPage = 'project-list' | 'project-create' | 'project-detail';
@@ -445,6 +447,9 @@ function ProjectWorkbench({
       </div>
 
       <div className="tabs">
+        <button className={selectedTab === 'overview' ? 'active' : ''} onClick={() => setSelectedTab('overview')}>
+          项目概览
+        </button>
         <button className={selectedTab === 'members' ? 'active' : ''} onClick={() => setSelectedTab('members')}>
           成员管理
         </button>
@@ -469,6 +474,14 @@ function ProjectWorkbench({
       </div>
 
       {loadingDetail ? <p className="muted">正在加载项目详情...</p> : null}
+
+      {selectedTab === 'overview' ? (
+        <ProjectOverviewPanel
+          actorId={actorId}
+          projectId={projectDetail.id}
+          onFeedback={setFeedback}
+        />
+      ) : null}
 
       {selectedTab === 'members' ? (
         <div className="member-page">
@@ -864,63 +877,76 @@ function SystemHeader({
 }
 
 type SystemProjectListPageProps = {
+  actorId: string;
   projects: ProjectSummary[];
   selectedProjectId: string;
   onRefresh: () => Promise<{ ok: boolean; selectedProjectId: string }>;
   onOpenProject: (projectId: string) => void;
   onShowCreatePage: () => void;
+  onFeedback: (message: string) => void;
 };
 
 function SystemProjectListPage({
+  actorId,
   projects,
   selectedProjectId,
   onRefresh,
   onOpenProject,
   onShowCreatePage,
+  onFeedback,
 }: SystemProjectListPageProps) {
   return (
-    <section className="section">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Projects</p>
-          <h2>Project List</h2>
-        </div>
-        <div className="button-row">
-          <button className="ghost" onClick={() => void onRefresh()}>
-            Refresh
-          </button>
-          <button className="primary" onClick={onShowCreatePage}>
-            New Project
-          </button>
-        </div>
-      </div>
+    <>
+      <ProjectPortfolioPanel
+        actorId={actorId}
+        selectedProjectId={selectedProjectId}
+        onOpenProject={onOpenProject}
+        onFeedback={onFeedback}
+      />
 
-      {projects.length > 0 ? (
-        <div className="project-grid">
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              className={`project-card${selectedProjectId === project.id ? ' active' : ''}`}
-              onClick={() => onOpenProject(project.id)}
-            >
-              <div>
-                <strong>{project.name}</strong>
-                <p>{project.description || 'No description'}</p>
-              </div>
-              <div className="project-meta">
-                <span>Admins {project.adminCount}</span>
-                <span>Members {project.memberCount}</span>
-              </div>
+      <section className="section">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Projects</p>
+            <h2>Project List</h2>
+          </div>
+          <div className="button-row">
+            <button className="ghost" onClick={() => void onRefresh()}>
+              Refresh
             </button>
-          ))}
+            <button className="primary" onClick={onShowCreatePage}>
+              New Project
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="empty-card">
-          <p>No projects yet.</p>
-          <p>Create the first project from the new project page.</p>
-        </div>
-      )}
-    </section>
+
+        {projects.length > 0 ? (
+          <div className="project-grid">
+            {projects.map((project) => (
+              <button
+                key={project.id}
+                className={`project-card${selectedProjectId === project.id ? ' active' : ''}`}
+                onClick={() => onOpenProject(project.id)}
+              >
+                <div>
+                  <strong>{project.name}</strong>
+                  <p>{project.description || 'No description'}</p>
+                </div>
+                <div className="project-meta">
+                  <span>Admins {project.adminCount}</span>
+                  <span>Members {project.memberCount}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-card">
+            <p>No projects yet.</p>
+            <p>Create the first project from the new project page.</p>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -1104,7 +1130,7 @@ export default function App() {
   const [systemPage, setSystemPage] = useState<SystemPage>('project-list');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [projectReloadKey, setProjectReloadKey] = useState(0);
-  const [selectedTab, setSelectedTab] = useState<TabKey>('members');
+  const [selectedTab, setSelectedTab] = useState<TabKey>('overview');
   const [projectDetail, setProjectDetail] = useState<NormalizedProject | null>(null);
   const [admins, setAdmins] = useState<ProjectMember[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -1180,9 +1206,16 @@ export default function App() {
         if (cancelled) return;
 
         const normalizedProjects = projectsResult.projects.map(normalizeProject);
+        const savedProjectId = window.localStorage.getItem('lobehub-admin-last-project-id');
         setActorContext(contextResult);
         setProjects(normalizedProjects);
-        setSelectedProjectId(contextResult.isSystemAdmin ? '' : getPreferredProjectId(normalizedProjects));
+        setSelectedProjectId(
+          contextResult.isSystemAdmin
+            ? ''
+            : savedProjectId && normalizedProjects.some((project) => project.id === savedProjectId)
+              ? savedProjectId
+              : getPreferredProjectId(normalizedProjects),
+        );
         setFeedback(getAccessFeedback(contextResult, normalizedProjects));
       } catch (error) {
         if (cancelled) return;
@@ -1203,6 +1236,11 @@ export default function App() {
       cancelled = true;
     };
   }, [actorId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    window.localStorage.setItem('lobehub-admin-last-project-id', selectedProjectId);
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (!actorContext || !selectedProjectId || !actorId || !selectedProjectRole) return;
@@ -1376,7 +1414,7 @@ export default function App() {
   }
 
   function openSystemProject(projectId: string) {
-    setSelectedTab('members');
+    setSelectedTab('overview');
     beginProjectSwitch(projectId);
     setProjectReloadKey((current) => current + 1);
     setSystemPage('project-detail');
@@ -1771,11 +1809,13 @@ export default function App() {
 
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
+                actorId={actorId}
                 projects={projects}
                 selectedProjectId={selectedProjectId}
                 onRefresh={refreshAccessBundle}
                 onOpenProject={openSystemProject}
                 onShowCreatePage={() => setSystemPage('project-create')}
+                onFeedback={setFeedback}
               />
             ) : null}
 
@@ -1995,6 +2035,12 @@ export default function App() {
       ) : portalMode === 'workspace' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
+            <ProjectPortfolioPanel
+              actorId={actorId}
+              selectedProjectId={selectedProjectId}
+              onOpenProject={beginProjectSwitch}
+              onFeedback={setFeedback}
+            />
             <section className="section workspace-switcher">
               <div className="section-head">
                 <div>

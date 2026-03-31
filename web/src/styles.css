@@ -137,6 +137,43 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.portfolio-stats-grid {
+  display: grid;
+  gap: 12px;
+}
+.portfolio-stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+.portfolio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.portfolio-list-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.58);
+}
+.portfolio-list-card p {
+  margin: 8px 0 0;
+}
+.portfolio-table {
+  min-width: 1200px;
+}
+.portfolio-table thead th {
+  white-space: nowrap;
+}
+.portfolio-row-selected td {
+  background: rgba(255, 244, 238, 0.58);
+}
+.portfolio-project-cell {
+  min-width: 220px;
+}
+.portfolio-open-button {
+  font-weight: 700;
+}
 
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .member-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
@@ -985,7 +1022,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .actor-box { min-width: 0; }
   .member-form-grid { grid-template-columns: 1fr; }
   .assistant-detail-grid, .assistant-skill-list { grid-template-columns: 1fr; }
-  .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .portfolio-stats-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .customer-analysis-layout { grid-template-columns: 1fr; }
   .customer-analysis-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topic-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1010,7 +1047,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .assistant-detail-head, .assistant-detail-meta { flex-direction: column; align-items: flex-start; }
   .statusbar { font-size: 13px; }
   .data-browser-toolbar, .raw-column-toolbar { flex-direction: column; align-items: stretch; }
-  .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: 1fr; }
+  .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .portfolio-stats-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: 1fr; }
   .customer-analysis-filter-grid { grid-template-columns: 1fr; }
   .topic-filter-grid { grid-template-columns: 1fr; }
   .daily-report-run-row, .daily-report-customer-head, .customer-analysis-message-head, .customer-analysis-job-card { flex-direction: column; align-items: stretch; }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectMemberRequest } from '../auth.js';
 import { query } from '../db.js';
+import { getProjectOverview } from '../project-facts.js';
 
 type MemberSummaryRow = {
   total_members: number;
@@ -294,6 +295,7 @@ export async function registerMobileRoutes(app: FastifyInstance) {
       provisionJobResult,
       latestDailyReportResult,
       runningDailyJobResult,
+      overview,
     ] = await Promise.all([
       query<MemberSummaryRow>(
         `
@@ -438,6 +440,7 @@ export async function registerMobileRoutes(app: FastifyInstance) {
         `,
         [params.projectId],
       ),
+      getProjectOverview(params.projectId),
     ]);
 
     const memberSummary = memberSummaryResult.rows[0] ?? {
@@ -507,9 +510,9 @@ export async function registerMobileRoutes(app: FastifyInstance) {
         },
         summary: {
           managedSessionCount: topicSummary.managed_session_count,
-          activeMemberCount: topicSummary.active_member_count,
-          totalTopics: topicSummary.total_topics,
-          lastTopicAt: topicSummary.last_topic_at,
+          activeMemberCount: overview?.stats.activeMemberCount ?? topicSummary.active_member_count,
+          totalTopics: overview?.stats.activeTopicCount ?? topicSummary.total_topics,
+          lastTopicAt: overview?.stats.lastActiveAt ?? topicSummary.last_topic_at,
         },
         rows: topicRowsResult.rows.map((row) => ({
           userId: row.user_id,
