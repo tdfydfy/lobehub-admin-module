@@ -88,6 +88,10 @@ function getAssistantDisplayName(assistant: ProjectMemberAssistant) {
   return assistant.title?.trim() || assistant.slug?.trim() || assistant.id;
 }
 
+function getAssistantBindingKindLabel(kind: 'skill' | 'plugin') {
+  return kind === 'plugin' ? '插件' : '技能';
+}
+
 function getAssistantDetailKey(userId: string, assistantId: string) {
   return `${userId}:${assistantId}`;
 }
@@ -220,12 +224,13 @@ function AssistantDetailPanel({
         </section>
 
         <section className="assistant-detail-section">
-          <h5>技能</h5>
+          <h5>技能与插件</h5>
           {detail.skills.length > 0 ? (
             <div className="assistant-skill-list">
               {detail.skills.map((skill) => (
                 <article key={skill.id} className="assistant-skill-card">
                   <strong>{skill.name}</strong>
+                  <span className="report-pill">{getAssistantBindingKindLabel(skill.kind)}</span>
                   <span className="member-subtext">{skill.identifier ?? skill.id}</span>
                   <span className="member-subtext">更新：{formatTime(skill.updatedAt)}</span>
                   {skill.description ? <p>{skill.description}</p> : null}
@@ -695,7 +700,8 @@ function ProjectWorkbench({
                   onClick={() => setSelectedAgentId(agent.id)}
                 >
                   <strong>{agent.title || agent.slug || agent.id}</strong>
-                  <span>技能 {agent.skillCount}</span>
+                  <span>技能 {agent.skillCount} · 已挂插件 {agent.attachedPluginCount}</span>
+                  {agent.hasProjectKnowledgePlugin ? <span>已挂当前项目知识</span> : null}
                   <small>更新于 {formatTime(agent.updatedAt)}</small>
                 </button>
               ))}

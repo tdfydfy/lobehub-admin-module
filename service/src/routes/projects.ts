@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
+import { buildProjectKnowledgePluginIdentifier, syncProjectDocumentPlugin } from '../project-document-plugin.js';
 import { enqueueProvisionJob, enqueueProvisionJobForUsers, scheduleProvisionJob } from '../provision-jobs.js';
 
 type ManagedAssistantStatus = 'provisioned' | 'failed' | 'skipped' | null;
@@ -37,9 +38,11 @@ type MemberAssistantSummary = {
   unresolvedPluginIdentifiers?: string[];
   skills?: Array<{
     id: string;
+    kind: 'skill' | 'plugin';
     name: string;
     description: string | null;
     identifier: string | null;
+    pluginType?: string | null;
     source: string | null;
     updatedAt: string;
   }>;
@@ -71,6 +74,8 @@ type MemberAssistantSkillRow = {
   identifier: string | null;
   source: string | null;
   updated_at: string;
+  kind: 'skill' | 'plugin';
+  plugin_type: string | null;
 };
 
 type MemberAssistantSkillLookupRow = MemberAssistantSkillRow & {
@@ -131,6 +136,113 @@ function parsePluginIdentifiers(value: unknown) {
   return [...new Set(identifiers)];
 }
 
+function buildAssistantBindingLookupKey(userId: string, identifier: string) {
+  return `${userId}:${identifier}`;
+}
+
+async function fetchAssistantBindingLookup(
+  executeQuery: typeof query,
+  requestedIdentifiersByUser: Map<string, Set<string>>,
+) {
+  const requestedUserIds = [...requestedIdentifiersByUser.keys()];
+  const requestedIdentifiers = [...new Set(
+    [...requestedIdentifiersByUser.values()].flatMap((identifiers) => [...identifiers]),
+  )];
+  const bindingLookup = new Map<string, MemberAssistantSkillLookupRow>();
+
+  if (requestedUserIds.length === 0 || requestedIdentifiers.length === 0) {
+    return bindingLookup;
+  }
+
+  const [skillResult, pluginResult] = await Promise.all([
+    executeQuery<MemberAssistantSkillLookupRow>(
+      `
+      select
+        s.user_id,
+        s.id,
+        s.name,
+        s.description,
+        s.identifier,
+        s.source,
+        s.updated_at,
+        'skill'::text as kind,
+        null::text as plugin_type
+      from public.agent_skills s
+      where s.user_id = any($1::text[])
+        and s.identifier = any($2::text[])
+      `,
+      [requestedUserIds, requestedIdentifiers],
+    ),
+    executeQuery<MemberAssistantSkillLookupRow>(
+      `
+      select
+        p.user_id,
+        'plugin:' || p.identifier as id,
+        coalesce(nullif(btrim(p.manifest->'meta'->>'title'), ''), p.identifier) as name,
+        nullif(btrim(p.manifest->'meta'->>'description'), '') as description,
+        p.identifier,
+        p.source,
+        p.updated_at,
+        'plugin'::text as kind,
+        p.type as plugin_type
+      from public.user_installed_plugins p
+      where p.user_id = any($1::text[])
+        and p.identifier = any($2::text[])
+      `,
+      [requestedUserIds, requestedIdentifiers],
+    ),
+  ]);
+
+  for (const row of skillResult.rows) {
+    if (!row.identifier) continue;
+    bindingLookup.set(buildAssistantBindingLookupKey(row.user_id, row.identifier), row);
+  }
+
+  for (const row of pluginResult.rows) {
+    if (!row.identifier) continue;
+
+    const lookupKey = buildAssistantBindingLookupKey(row.user_id, row.identifier);
+
+    if (!bindingLookup.has(lookupKey)) {
+      bindingLookup.set(lookupKey, row);
+    }
+  }
+
+  return bindingLookup;
+}
+
+function buildAssistantBindings(
+  userId: string,
+  pluginIdentifiers: string[],
+  bindingLookup: Map<string, MemberAssistantSkillLookupRow>,
+) {
+  const matchedIdentifiers = new Set<string>();
+  const skills: MemberAssistantSummary['skills'] = [];
+
+  for (const identifier of pluginIdentifiers) {
+    const binding = bindingLookup.get(buildAssistantBindingLookupKey(userId, identifier));
+
+    if (!binding) continue;
+
+    matchedIdentifiers.add(identifier);
+    skills.push({
+      id: binding.id,
+      kind: binding.kind,
+      name: binding.name,
+      description: binding.description,
+      identifier: binding.identifier,
+      pluginType: binding.plugin_type,
+      source: binding.source,
+      updatedAt: binding.updated_at,
+    });
+  }
+
+  return {
+    skills: skills ?? [],
+    unresolvedPluginIdentifiers: pluginIdentifiers.filter((identifier) => !matchedIdentifiers.has(identifier)),
+  };
+}
+
 async function fetchProjectAssistantDetail(projectId: string, userId: string, assistantId: string) {
   const assistantResult = await query<MemberAssistantDetailRow>(
     `
@@ -176,50 +288,14 @@ async function fetchProjectAssistantDetail(projectId: string, userId: string, as
   }
 
   const pluginIdentifiers = parsePluginIdentifiers(assistant.plugins);
-  const skillsResult = pluginIdentifiers.length > 0
-    ? await query<MemberAssistantSkillRow>(
-      `
-      select
-        s.id,
-        s.name,
-        s.description,
-        s.identifier,
-        s.source,
-        s.updated_at
-      from public.agent_skills s
-      where s.user_id = $1
-        and s.identifier = any($2::text[])
-      order by s.updated_at desc, s.name asc
-      `,
-      [assistant.user_id, pluginIdentifiers],
-    )
-    : { rows: [] as MemberAssistantSkillRow[] };
+  const requestedIdentifiersByUser = new Map<string, Set<string>>();
 
-  const skillOrder = new Map(pluginIdentifiers.map((identifier, index) => [identifier, index]));
-  const matchedIdentifiers = new Set<string>();
-  const skills = skillsResult.rows
-    .map((row) => {
-      if (row.identifier) {
-        matchedIdentifiers.add(row.identifier);
-      }
+  if (pluginIdentifiers.length > 0) {
+    requestedIdentifiersByUser.set(assistant.user_id, new Set(pluginIdentifiers));
+  }
 
-      return {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        identifier: row.identifier,
-        source: row.source,
-        updatedAt: row.updated_at,
-      };
-    })
-    .sort((left, right) => {
-      const leftOrder = skillOrder.get(left.identifier ?? '') ?? Number.MAX_SAFE_INTEGER;
-      const rightOrder = skillOrder.get(right.identifier ?? '') ?? Number.MAX_SAFE_INTEGER;
-
-      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-
-      return left.name.localeCompare(right.name, 'zh-CN');
-    });
+  const bindingLookup = await fetchAssistantBindingLookup(query, requestedIdentifiersByUser);
+  const bindingState = buildAssistantBindings(assistant.user_id, pluginIdentifiers, bindingLookup);
 
   return {
     assistant: {
@@ -237,10 +313,10 @@ async function fetchProjectAssistantDetail(projectId: string, userId: string, as
       chatConfig: assistant.chat_config,
       params: assistant.params,
       pluginIdentifiers,
-      unresolvedPluginIdentifiers: pluginIdentifiers.filter((identifier) => !matchedIdentifiers.has(identifier)),
+      unresolvedPluginIdentifiers: bindingState.unresolvedPluginIdentifiers,
       isProjectManaged: assistant.is_project_managed,
       managedStatus: assistant.managed_status,
-      skills,
+      skills: bindingState.skills,
     },
   };
 }
@@ -689,48 +765,11 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         requestedSkillIdentifiersByUser.set(row.user_id, current);
       }
 
-      const requestedUserIds = [...requestedSkillIdentifiersByUser.keys()];
-      const requestedSkillIdentifiers = [...new Set(
-        [...requestedSkillIdentifiersByUser.values()].flatMap((identifiers) => [...identifiers]),
-      )];
-      const skillLookup = new Map<string, MemberAssistantSkillLookupRow>();
-      const skillResult = requestedUserIds.length > 0 && requestedSkillIdentifiers.length > 0
-        ? await query<MemberAssistantSkillLookupRow>(
-          `
-          select
-            s.user_id,
-            s.id,
-            s.name,
-            s.description,
-            s.identifier,
-            s.source,
-            s.updated_at
-          from public.agent_skills s
-          where s.user_id = any($1::text[])
-            and s.identifier = any($2::text[])
-          `,
-          [requestedUserIds, requestedSkillIdentifiers],
-        )
-        : { rows: [] as MemberAssistantSkillLookupRow[] };
-
-      for (const row of skillResult.rows) {
-        if (!row.identifier) continue;
-        skillLookup.set(`${row.user_id}:${row.identifier}`, row);
-      }
+      const bindingLookup = await fetchAssistantBindingLookup(query, requestedSkillIdentifiersByUser);
 
       for (const row of assistantResult.rows) {
         const pluginIdentifiers = pluginIdentifiersByAssistant.get(`${row.user_id}:${row.agent_id}`) ?? [];
-        const skills = pluginIdentifiers
-          .map((identifier) => skillLookup.get(`${row.user_id}:${identifier}`))
-          .filter((skill): skill is MemberAssistantSkillLookupRow => Boolean(skill))
-          .map((skill) => ({
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            identifier: skill.identifier,
-            source: skill.source,
-            updatedAt: skill.updated_at,
-          }));
+        const bindingState = buildAssistantBindings(row.user_id, pluginIdentifiers, bindingLookup);
         const current = assistantsByUser.get(row.user_id) ?? [];
         current.push({
           id: row.agent_id,
@@ -748,10 +787,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           chatConfig: row.chat_config,
           params: row.params,
           pluginIdentifiers,
-          unresolvedPluginIdentifiers: pluginIdentifiers.filter(
-            (identifier) => !skillLookup.has(`${row.user_id}:${identifier}`),
-          ),
-          skills,
+          unresolvedPluginIdentifiers: bindingState.unresolvedPluginIdentifiers,
+          skills: bindingState.skills,
         });
         assistantsByUser.set(row.user_id, current);
       }
@@ -852,6 +889,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         [params.projectId, body.emails, body.role],
       );
 
+      await syncProjectDocumentPlugin(client, params.projectId);
       await client.query('commit');
 
       return reply.code(201).send({
@@ -927,6 +965,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         [params.projectId, params.userId, body.role],
       );
 
+      await syncProjectDocumentPlugin(client, params.projectId);
       await client.query('commit');
       return reply.code(204).send();
     } catch (error) {
@@ -986,6 +1025,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         [params.projectId, params.userId],
       );
 
+      await syncProjectDocumentPlugin(client, params.projectId);
       await client.query('commit');
       return reply.code(204).send();
     } catch (error) {
@@ -1120,6 +1160,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       slug: string | null;
       updated_at: string;
       skill_count: string;
+      attached_plugin_count: number;
+      has_project_knowledge_plugin: boolean;
     }>(
       `
       select
@@ -1131,7 +1173,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           select count(*)::text
           from public.agent_skills s
           where s.user_id = a.user_id
-        ) as skill_count
+        ) as skill_count,
+        case
+          when jsonb_typeof(a.plugins) = 'array' then jsonb_array_length(a.plugins)
+          else 0
+        end as attached_plugin_count,
+        coalesce(a.plugins ? $2, false) as has_project_knowledge_plugin
       from public.agents a
       where a.user_id::text = $1::text
         and a.title is not null
@@ -1139,7 +1186,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         and (a.slug is null or a.slug not in ('inbox', 'page-agent', 'agent-builder', 'group-agent-builder'))
       order by a.updated_at desc
       `,
-      [queryParams.adminUserId],
+      [queryParams.adminUserId, buildProjectKnowledgePluginIdentifier(params.projectId)],
     );
 
     return {
@@ -1149,6 +1196,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         slug: row.slug,
         updatedAt: row.updated_at,
         skillCount: Number(row.skill_count),
+        attachedPluginCount: Number(row.attached_plugin_count ?? 0),
+        hasProjectKnowledgePlugin: Boolean(row.has_project_knowledge_plugin),
       })),
     };
   });
@@ -1167,6 +1216,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         'select * from lobehub_admin.set_project_template($1, $2, $3, $4, $5)',
         [params.projectId, body.templateUserId, body.templateAgentId, body.copySkills, actor.id],
       );
+      await syncProjectDocumentPlugin(query as any, params.projectId);
     } catch (error) {
       const message = (error as Error).message;
 

@@ -36,6 +36,8 @@ type ProjectMemberUserRow = {
   user_id: string;
 };
 
+const EXCLUDED_AGENT_SLUGS = ['inbox', 'page-agent', 'agent-builder', 'group-agent-builder'];
+
 export type ProjectDocumentPluginSyncResult = {
   documentCount: number;
   managedAgentCount: number;
@@ -230,7 +232,6 @@ async function fetchTargetUsers(executeQuery: Queryable, projectId: string, temp
     select user_id
     from lobehub_admin.project_members
     where project_id = $1
-      and role = 'member'
     order by joined_at asc
     `,
     [projectId],
@@ -258,8 +259,60 @@ async function fetchManagedAgents(executeQuery: Queryable, projectId: string, te
       on a.id = pma.managed_agent_id
     where pma.project_id = $1
       and pma.managed_agent_id is not null
+    union all
+    select
+      a.id,
+      a.user_id,
+      a.plugins
+    from lobehub_admin.project_members pm
+    join public.agents a
+      on a.user_id = pm.user_id
+    where pm.project_id = $1
+      and pm.role = 'admin'
+      and coalesce(a.slug, '') <> all($3::text[])
     `,
-    [projectId, templateAgentId],
+    [projectId, templateAgentId, EXCLUDED_AGENT_SLUGS],
+  );
+
+  const seen = new Set<string>();
+
+  return result.rows.filter((row) => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
+async function fetchUsersWithInstalledPlugin(
+  executeQuery: Queryable,
+  identifier: string,
+) {
+  const result = await executeQuery.query<ProjectMemberUserRow>(
+    `
+    select distinct user_id
+    from public.user_installed_plugins
+    where identifier = $1
+    `,
+    [identifier],
+  );
+
+  return result.rows.map((row) => row.user_id);
+}
+
+async function fetchAgentsWithPlugin(
+  executeQuery: Queryable,
+  identifier: string,
+) {
+  const result = await executeQuery.query<ProjectManagedAgentRow>(
+    `
+    select
+      id,
+      user_id,
+      plugins
+    from public.agents
+    where coalesce(plugins, '[]'::jsonb) ? $1
+    `,
+    [identifier],
   );
 
   return result.rows;
@@ -429,14 +482,20 @@ export async function syncProjectDocumentPlugin(
   const documents = await fetchPublishedDocuments(executeQuery, projectId);
   const targetUsers = await fetchTargetUsers(executeQuery, projectId, template.template_user_id);
   const targetAgents = await fetchManagedAgents(executeQuery, projectId, template.template_agent_id);
+  const existingPluginUsers = await fetchUsersWithInstalledPlugin(executeQuery, identifier);
+  const existingPluginAgents = await fetchAgentsWithPlugin(executeQuery, identifier);
   const legacySkillIdentifier = buildLegacyProjectSkillIdentifier(projectId);
+  const staleUsers = existingPluginUsers.filter((userId) => !targetUsers.includes(userId));
+  const staleAgents = existingPluginAgents.filter((agent) => !targetAgents.some((target) => target.id === agent.id));
 
   await removeLegacyProjectSkills(executeQuery, targetUsers, projectId);
   await removeAgentPlugins(executeQuery, targetAgents, legacySkillIdentifier);
+  await removeInstalledPluginForUsers(executeQuery, staleUsers, identifier);
+  await removeAgentPlugins(executeQuery, staleAgents, identifier);
 
   if (documents.length === 0) {
-    await removeAgentPlugins(executeQuery, targetAgents, identifier);
-    await removeInstalledPluginForUsers(executeQuery, targetUsers, identifier);
+    await removeAgentPlugins(executeQuery, [...targetAgents, ...staleAgents], identifier);
+    await removeInstalledPluginForUsers(executeQuery, [...targetUsers, ...staleUsers], identifier);
 
     return {
       documentCount: 0,

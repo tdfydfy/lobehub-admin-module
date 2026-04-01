@@ -200,9 +200,11 @@ export type ProjectMemberAssistant = {
 
 export type ProjectMemberAssistantSkill = {
   id: string;
+  kind: 'skill' | 'plugin';
   name: string;
   description: string | null;
   identifier: string | null;
+  pluginType?: string | null;
   source: string | null;
   updatedAt: string;
 };
@@ -309,6 +311,8 @@ export type AgentOption = {
   slug: string | null;
   updatedAt: string;
   skillCount: number;
+  attachedPluginCount: number;
+  hasProjectKnowledgePlugin: boolean;
 };
 
 export type JobDetail = {
