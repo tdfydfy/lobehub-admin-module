@@ -2,7 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
-import { buildProjectKnowledgePluginIdentifier, syncProjectDocumentPlugin } from '../project-document-plugin.js';
+import {
+  buildKnowledgePluginIdentifier,
+  removeKnowledgePluginForUsers,
+  syncProjectDocumentPlugin,
+} from '../project-document-plugin.js';
 import { enqueueProvisionJob, enqueueProvisionJobForUsers, scheduleProvisionJob } from '../provision-jobs.js';
 
 type ManagedAssistantStatus = 'provisioned' | 'failed' | 'skipped' | null;
@@ -82,6 +86,15 @@ type MemberAssistantSkillLookupRow = MemberAssistantSkillRow & {
   user_id: string;
 };
 
+type ProjectMembershipConflictRow = {
+  current_project_id: string;
+  current_project_name: string;
+  display_name: string;
+  email: string | null;
+  role: 'admin' | 'member';
+  user_id: string;
+};
+
 const createProjectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -123,6 +136,109 @@ function templateMutationError(message: string) {
   const error = new Error(message);
   (error as Error & { statusCode?: number }).statusCode = 409;
   return error;
+}
+
+async function findProjectMembershipConflicts(
+  executeQuery: typeof query,
+  userIds: string[],
+  excludeProjectId?: string,
+) {
+  if (userIds.length === 0) return [] as ProjectMembershipConflictRow[];
+
+  const values: unknown[] = [userIds];
+  const excludeClause = excludeProjectId
+    ? (() => {
+      values.push(excludeProjectId);
+      return `and pm.project_id <> $${values.length}`;
+    })()
+    : '';
+
+  const result = await executeQuery<ProjectMembershipConflictRow>(
+    `
+    select
+      pm.user_id,
+      pm.project_id as current_project_id,
+      p.name as current_project_name,
+      lobehub_admin.user_display_name(pm.user_id) as display_name,
+      u.email,
+      pm.role
+    from lobehub_admin.project_members pm
+    join lobehub_admin.projects p
+      on p.id = pm.project_id
+    join public.users u
+      on u.id = pm.user_id
+    where pm.user_id = any($1::text[])
+      ${excludeClause}
+      and not exists (
+        select 1
+        from lobehub_admin.system_admins sa
+        where sa.user_id = pm.user_id
+      )
+    order by pm.joined_at asc
+    `,
+    values,
+  );
+
+  return result.rows;
+}
+
+async function findProjectMembershipConflictsByEmails(
+  executeQuery: typeof query,
+  emails: string[],
+  excludeProjectId?: string,
+) {
+  if (emails.length === 0) return [] as ProjectMembershipConflictRow[];
+
+  const normalizedEmails = emails.map((email) => email.trim().toLowerCase()).filter(Boolean);
+
+  if (normalizedEmails.length === 0) return [] as ProjectMembershipConflictRow[];
+
+  const values: unknown[] = [normalizedEmails];
+  const excludeClause = excludeProjectId
+    ? (() => {
+      values.push(excludeProjectId);
+      return `and pm.project_id <> $${values.length}`;
+    })()
+    : '';
+
+  const result = await executeQuery<ProjectMembershipConflictRow>(
+    `
+    select
+      pm.user_id,
+      pm.project_id as current_project_id,
+      p.name as current_project_name,
+      lobehub_admin.user_display_name(pm.user_id) as display_name,
+      u.email,
+      pm.role
+    from lobehub_admin.project_members pm
+    join lobehub_admin.projects p
+      on p.id = pm.project_id
+    join public.users u
+      on u.id = pm.user_id
+    where lower(coalesce(u.email, '')) = any($1::text[])
+      ${excludeClause}
+      and not exists (
+        select 1
+        from lobehub_admin.system_admins sa
+        where sa.user_id = pm.user_id
+      )
+    order by pm.joined_at asc
+    `,
+    values,
+  );
+
+  return result.rows;
+}
+
+function throwProjectMembershipConflicts(conflicts: ProjectMembershipConflictRow[]) {
+  if (conflicts.length === 0) return;
+
+  const summary = conflicts
+    .slice(0, 3)
+    .map((conflict) => `${conflict.display_name} -> ${conflict.current_project_name}`)
+    .join('；');
+
+  throw memberMutationError(`以下账号已绑定其他项目，请先移除原项目绑定：${summary}`);
 }
 
 function parsePluginIdentifiers(value: unknown) {
@@ -581,15 +697,33 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     }
 
     const body = createProjectSchema.parse(request.body);
+    const conflicts = await findProjectMembershipConflicts(query, body.adminUserIds);
+    throwProjectMembershipConflicts(conflicts);
 
-    const result = await query<{ project_id: string }>(
-      'select lobehub_admin.create_project($1, $2, $3, $4) as project_id',
-      [body.name, body.description ?? null, actor.id, body.adminUserIds],
-    );
+    try {
+      const result = await query<{ project_id: string }>(
+        'select lobehub_admin.create_project($1, $2, $3, $4) as project_id',
+        [body.name, body.description ?? null, actor.id, body.adminUserIds],
+      );
 
-    return reply.code(201).send({
-      projectId: result.rows[0]?.project_id,
-    });
+      const projectId = result.rows[0]?.project_id;
+
+      if (projectId) {
+        await syncProjectDocumentPlugin(query as any, projectId);
+      }
+
+      return reply.code(201).send({
+        projectId,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+
+      if (message.includes('already bound to another project')) {
+        throw memberMutationError('目标账号已绑定其他项目，请先移除原项目绑定');
+      }
+
+      throw error;
+    }
   });
 
   app.get('/api/projects/:projectId', async (request) => {
@@ -636,16 +770,40 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     const params = z.object({ projectId: z.string().min(1) }).parse(request.params);
 
-    const result = await query<{ id: string }>(
-      'delete from lobehub_admin.projects where id = $1 returning id',
-      [params.projectId],
-    );
+    const client = await db.connect();
 
-    if (!result.rows[0]) {
-      return reply.code(404).send({ message: 'Project not found' });
+    try {
+      await client.query('begin');
+
+      const memberResult = await client.query<{ user_id: string }>(
+        `
+        select user_id
+        from lobehub_admin.project_members
+        where project_id = $1
+        `,
+        [params.projectId],
+      );
+
+      await removeKnowledgePluginForUsers(client, memberResult.rows.map((row) => row.user_id));
+
+      const result = await client.query<{ id: string }>(
+        'delete from lobehub_admin.projects where id = $1 returning id',
+        [params.projectId],
+      );
+
+      if (!result.rows[0]) {
+        await client.query('rollback');
+        return reply.code(404).send({ message: 'Project not found' });
+      }
+
+      await client.query('commit');
+      return reply.code(204).send();
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    return reply.code(204).send();
   });
 
   app.get('/api/projects/:projectId/members', async (request) => {
@@ -850,6 +1008,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
 
     try {
       await client.query('begin');
+      const conflicts = await findProjectMembershipConflictsByEmails(client.query.bind(client) as typeof query, body.emails, params.projectId);
+      throwProjectMembershipConflicts(conflicts);
 
       if (body.role === 'member') {
         const normalizedEmails = body.emails.map((email) => email.trim().toLowerCase());
@@ -902,6 +1062,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       });
     } catch (error) {
       await client.query('rollback');
+      const message = (error as Error).message;
+
+      if (message.includes('already bound to another project')) {
+        throw memberMutationError('目标账号已绑定其他项目，请先移除原项目绑定');
+      }
+
       throw error;
     } finally {
       client.release();
@@ -1025,6 +1191,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         [params.projectId, params.userId],
       );
 
+      await removeKnowledgePluginForUsers(client, [params.userId]);
       await syncProjectDocumentPlugin(client, params.projectId);
       await client.query('commit');
       return reply.code(204).send();
@@ -1186,7 +1353,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         and (a.slug is null or a.slug not in ('inbox', 'page-agent', 'agent-builder', 'group-agent-builder'))
       order by a.updated_at desc
       `,
-      [queryParams.adminUserId, buildProjectKnowledgePluginIdentifier(params.projectId)],
+      [queryParams.adminUserId, buildKnowledgePluginIdentifier()],
     );
 
     return {

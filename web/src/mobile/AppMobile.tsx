@@ -99,7 +99,11 @@ function normalizeProject(project: ProjectSummary): NormalizedProject {
   };
 }
 
-function getPreferredProjectId(projects: NormalizedProject[]) {
+function getPreferredProjectId(projects: NormalizedProject[], activeProjectId?: string | null) {
+  if (activeProjectId && projects.some((project) => project.id === activeProjectId)) {
+    return activeProjectId;
+  }
+
   return projects.find((project) => project.actorRole === 'admin')?.id ?? projects[0]?.id ?? '';
 }
 
@@ -2600,7 +2604,7 @@ export default function AppMobile() {
       const normalizedProjects = projectsResult.projects.map(normalizeProject);
       const nextSelectedProjectId = preferredProjectId && normalizedProjects.some((project) => project.id === preferredProjectId)
         ? preferredProjectId
-        : getPreferredProjectId(normalizedProjects);
+        : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId);
 
       setActorContext(contextResult);
       setProjects(normalizedProjects);

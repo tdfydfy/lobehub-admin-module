@@ -26,6 +26,15 @@ export type ProjectActorAccess = ActorIdentity & {
   projectRole: ProjectActorAccessRole;
 };
 
+export type ActorProjectBindingStatus = 'system_admin' | 'bound' | 'unbound' | 'invalid_multi_project';
+
+export type ActorProjectBinding = {
+  status: ActorProjectBindingStatus;
+  projectId: string | null;
+  projectName: string | null;
+  projectRole: 'admin' | 'member' | null;
+};
+
 type CredentialActorRow = {
   id: string;
   email: string | null;
@@ -309,6 +318,70 @@ export async function getProjectAccessCounts(actorId: string) {
   return {
     managedProjectCount: Number(result.rows[0]?.managed_project_count ?? 0),
     joinedProjectCount: Number(result.rows[0]?.joined_project_count ?? 0),
+  };
+}
+
+export async function getActorProjectBinding(actorId: string): Promise<ActorProjectBinding> {
+  const actor = await findActor(actorId);
+
+  if (!actor) {
+    throw withStatus(`Actor not found: ${actorId}`, 404);
+  }
+
+  if (actor.isSystemAdmin) {
+    return {
+      status: 'system_admin',
+      projectId: null,
+      projectName: null,
+      projectRole: null,
+    };
+  }
+
+  const result = await query<{
+    project_id: string;
+    project_name: string;
+    role: 'admin' | 'member';
+  }>(
+    `
+    select
+      pm.project_id,
+      p.name as project_name,
+      pm.role
+    from lobehub_admin.project_members pm
+    join lobehub_admin.projects p
+      on p.id = pm.project_id
+    where pm.user_id = $1
+    order by pm.joined_at asc
+    limit 2
+    `,
+    [actorId],
+  );
+
+  if (result.rows.length === 0) {
+    return {
+      status: 'unbound',
+      projectId: null,
+      projectName: null,
+      projectRole: null,
+    };
+  }
+
+  if (result.rows.length > 1) {
+    return {
+      status: 'invalid_multi_project',
+      projectId: null,
+      projectName: null,
+      projectRole: null,
+    };
+  }
+
+  const row = result.rows[0];
+
+  return {
+    status: 'bound',
+    projectId: row.project_id,
+    projectName: row.project_name,
+    projectRole: row.role,
   };
 }
 

@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { db, query } from '../db.js';
 import {
+  buildKnowledgePluginIdentifier,
   buildProjectKnowledgePluginIdentifier,
+  verifyKnowledgePluginSignature,
   syncProjectDocumentPlugin,
   verifyProjectKnowledgePluginSignature,
 } from '../project-document-plugin.js';
@@ -110,6 +112,11 @@ const internalReadQuerySchema = z.object({
 
 const publicPluginParamsSchema = z.object({
   projectId: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+const publicKnowledgePluginParamsSchema = z.object({
+  userId: z.string().min(1),
   signature: z.string().min(1),
 });
 
@@ -325,6 +332,12 @@ function ensurePluginSignature(params: z.infer<typeof publicPluginParamsSchema>)
   }
 }
 
+function ensureKnowledgePluginSignature(params: z.infer<typeof publicKnowledgePluginParamsSchema>) {
+  if (!verifyKnowledgePluginSignature(params.userId, params.signature)) {
+    throw createHttpError('Invalid plugin signature', 401);
+  }
+}
+
 function ensureInternalToken(request: FastifyRequest) {
   const configuredToken = env.PROJECT_DOCS_INTERNAL_TOKEN?.trim();
 
@@ -444,6 +457,212 @@ async function fetchPublishedGlobalDocuments() {
   );
 
   return result.rows;
+}
+
+async function resolveKnowledgeProjectContextByUserId(userId: string) {
+  const systemAdminResult = await query<{ exists: boolean }>(
+    `
+    select exists (
+      select 1
+      from lobehub_admin.system_admins sa
+      where sa.user_id = $1
+    ) as exists
+    `,
+    [userId],
+  );
+
+  if (systemAdminResult.rows[0]?.exists) {
+    throw createHttpError('System admin cannot use automatic project routing', 403);
+  }
+
+  const result = await query<{
+    project_id: string;
+    project_name: string;
+    role: 'admin' | 'member';
+  }>(
+    `
+    select
+      pm.project_id,
+      p.name as project_name,
+      pm.role
+    from lobehub_admin.project_members pm
+    join lobehub_admin.projects p
+      on p.id = pm.project_id
+    where pm.user_id = $1
+    order by pm.joined_at asc
+    limit 2
+    `,
+    [userId],
+  );
+
+  if (result.rows.length === 0) {
+    throw createHttpError('No active project binding found for this account', 404);
+  }
+
+  if (result.rows.length > 1) {
+    throw createHttpError('This account is bound to multiple projects', 409);
+  }
+
+  return result.rows[0];
+}
+
+async function fetchPublishedProjectKnowledgeDocuments(projectId: string) {
+  const result = await query<ProjectDocumentRow>(
+    `
+    select
+      id,
+      project_id,
+      slug,
+      title,
+      description,
+      content_md,
+      status,
+      sort_order,
+      is_entry,
+      created_by,
+      updated_by,
+      created_at,
+      updated_at
+    from lobehub_admin.project_documents
+    where project_id = $1
+      and status = 'published'
+    order by is_entry desc, sort_order asc, updated_at desc
+    `,
+    [projectId],
+  );
+
+  return result.rows.map(mapProjectKnowledgeDocument);
+}
+
+async function queryUnifiedKnowledgeDocuments(projectId: string, question: string) {
+  const [publishedDocumentCount, publishedGlobalDocumentCount, projectDocs, globalDocs] = await Promise.all([
+    fetchPublishedDocumentCount(projectId),
+    fetchPublishedGlobalDocumentCount(),
+    fetchPublishedProjectKnowledgeDocuments(projectId),
+    fetchPublishedGlobalDocuments().then((rows) => rows.map(mapGlobalDocument)),
+  ]);
+
+  const allDocs = [...projectDocs, ...globalDocs];
+  const normalizedQuestion = question.trim();
+
+  if (!normalizedQuestion) {
+    return {
+      documents: allDocs.slice(0, 3),
+      meta: {
+        globalDocumentCount: publishedGlobalDocumentCount,
+        publishedDocumentCount,
+        question: normalizedQuestion,
+        strategy: 'fallback-no-question',
+      },
+    };
+  }
+
+  if (allDocs.length <= 1) {
+    return {
+      documents: allDocs.slice(0, 1),
+      meta: {
+        globalDocumentCount: publishedGlobalDocumentCount,
+        publishedDocumentCount,
+        question: normalizedQuestion,
+        strategy: 'single-document-direct',
+      },
+    };
+  }
+
+  const matched = await query<ProjectDocumentSearchRow>(
+    `
+    select
+      id,
+      project_id,
+      slug,
+      title,
+      description,
+      content_md,
+      status,
+      sort_order,
+      is_entry,
+      updated_at,
+      ts_rank_cd(
+        to_tsvector(
+          'simple',
+          coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(content_md, '')
+        ),
+        plainto_tsquery('simple', $2)
+      ) as rank_score
+    from lobehub_admin.project_documents
+    where project_id = $1
+      and status = 'published'
+      and to_tsvector(
+        'simple',
+        coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(content_md, '')
+      ) @@ plainto_tsquery('simple', $2)
+    order by rank_score desc, is_entry desc, sort_order asc, updated_at desc
+    limit 3
+    `,
+    [projectId, normalizedQuestion],
+  );
+
+  if (matched.rows.length > 0) {
+    return {
+      documents: matched.rows.map((row) => mapDocument(row as unknown as ProjectDocumentRow)),
+      meta: {
+        globalDocumentCount: publishedGlobalDocumentCount,
+        matchedDocumentCount: matched.rows.length,
+        publishedDocumentCount,
+        question: normalizedQuestion,
+        strategy: 'fts-match',
+      },
+    };
+  }
+
+  const fallbackTerms = extractSearchTerms(normalizedQuestion);
+
+  if (fallbackTerms.length > 0) {
+    const fuzzy = allDocs
+      .map((doc) => ({ doc, score: scoreKnowledgeDocument(doc, fallbackTerms) }))
+      .filter((item) => item.score > (item.doc.knowledgeScope === 'project' ? 100 : 10))
+      .sort((left, right) => right.score - left.score);
+
+    const fuzzyProject = fuzzy.filter((item) => item.doc.knowledgeScope === 'project');
+    const fuzzyGlobal = fuzzy.filter((item) => item.doc.knowledgeScope === 'global');
+    const mergedFuzzy = [
+      ...fuzzyProject.slice(0, 2),
+      ...fuzzyGlobal.slice(0, 1),
+      ...fuzzyProject.slice(2),
+      ...fuzzyGlobal.slice(1),
+    ]
+      .slice(0, 3)
+      .map((item) => item.doc);
+
+    if (mergedFuzzy.length > 0) {
+      return {
+        documents: mergedFuzzy,
+        meta: {
+          fallbackTerms,
+          globalDocumentCount: publishedGlobalDocumentCount,
+          matchedDocumentCount: mergedFuzzy.length,
+          publishedDocumentCount,
+          question: normalizedQuestion,
+          strategy: 'fuzzy-like-match',
+        },
+      };
+    }
+  }
+
+  return {
+    documents: [
+      ...projectDocs.filter((doc) => doc.isEntry),
+      ...globalDocs.filter((doc) => doc.isEntry || doc.slug.startsWith('00-')),
+    ].slice(0, 3),
+    meta: {
+      fallbackToContext: true,
+      globalDocumentCount: publishedGlobalDocumentCount,
+      matchedDocumentCount: 0,
+      publishedDocumentCount,
+      question: normalizedQuestion,
+      strategy: 'fallback-entry-docs',
+    },
+  };
 }
 
 function scoreKnowledgeDocument(doc: UnifiedKnowledgeDocument, terms: string[]) {
@@ -900,6 +1119,77 @@ export async function registerProjectDocumentRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get('/public/knowledge/:userId/:signature/manifest.json', async (request) => {
+    const params = publicKnowledgePluginParamsSchema.parse(request.params);
+    ensureKnowledgePluginSignature(params);
+
+    const baseUrl = env.PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL?.trim()?.replace(/\/+$/, '');
+
+    if (!baseUrl) {
+      throw createHttpError('PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL is not configured', 503);
+    }
+
+    const projectContext = await resolveKnowledgeProjectContextByUserId(params.userId);
+    const [projectDocumentCount, globalDocumentCount] = await Promise.all([
+      fetchPublishedDocumentCount(projectContext.project_id),
+      fetchPublishedGlobalDocumentCount(),
+    ]);
+
+    return {
+      api: [
+        {
+          description: 'Answer any question using the current project knowledge first, then supplement with shared global knowledge when needed.',
+          name: 'queryKnowledge',
+          parameters: {
+            properties: {
+              question: {
+                description: 'The user question about the current project.',
+                type: 'string',
+              },
+            },
+            required: ['question'],
+            type: 'object',
+          },
+          url: `${baseUrl}/public/knowledge/${params.userId}/${params.signature}/query`,
+        },
+      ],
+      identifier: buildKnowledgePluginIdentifier(),
+      meta: {
+        avatar: '知识',
+        description: `当前项目与全局共享知识：${projectContext.project_name}`,
+        title: '统一知识库',
+      },
+      project: {
+        projectDocumentCount,
+        projectId: projectContext.project_id,
+        projectName: projectContext.project_name,
+        projectRole: projectContext.role,
+      },
+      globalDocumentCount,
+      type: 'default',
+      version: '1',
+    };
+  });
+
+  app.post('/public/knowledge/:userId/:signature/query', async (request) => {
+    const params = publicKnowledgePluginParamsSchema.parse(request.params);
+    const body = normalizePublicPluginQuestionInput(request.body);
+    ensureKnowledgePluginSignature(params);
+
+    const projectContext = await resolveKnowledgeProjectContextByUserId(params.userId);
+    const result = await queryUnifiedKnowledgeDocuments(projectContext.project_id, body.question?.trim() ?? '');
+
+    return {
+      ...result,
+      meta: {
+        ...result.meta,
+        projectId: projectContext.project_id,
+        projectName: projectContext.project_name,
+        projectRole: projectContext.role,
+      },
+    };
+  });
+
   app.get('/public/project-knowledge/:projectId/:signature/manifest.json', async (request) => {
     const params = publicPluginParamsSchema.parse(request.params);
     ensurePluginSignature(params);
@@ -1013,182 +1303,7 @@ export async function registerProjectDocumentRoutes(app: FastifyInstance) {
     const params = publicPluginParamsSchema.parse(request.params);
     const body = normalizePublicPluginQuestionInput(request.body);
     ensurePluginSignature(params);
-    const publishedDocumentCount = await fetchPublishedDocumentCount(params.projectId);
-    const publishedGlobalDocumentCount = await fetchPublishedGlobalDocumentCount();
-    const question = body.question?.trim() ?? '';
-
-    if (!question) {
-      const fallback = await query<ProjectDocumentRow>(
-        `
-        select
-          id,
-          project_id,
-          slug,
-          title,
-          description,
-          content_md,
-          status,
-          sort_order,
-          is_entry,
-          created_by,
-          updated_by,
-          created_at,
-          updated_at
-        from lobehub_admin.project_documents
-        where project_id = $1
-          and status = 'published'
-        order by is_entry desc, sort_order asc, updated_at desc
-        limit 3
-        `,
-        [params.projectId],
-      );
-
-      return {
-        documents: fallback.rows.map(mapProjectKnowledgeDocument),
-        meta: {
-          globalDocumentCount: publishedGlobalDocumentCount,
-          publishedDocumentCount,
-          question,
-          strategy: 'fallback-no-question',
-        },
-      };
-    }
-
-    const projectDocs = (await query<ProjectDocumentRow>(
-      `
-      select
-        id,
-        project_id,
-        slug,
-        title,
-        description,
-        content_md,
-        status,
-        sort_order,
-        is_entry,
-        created_by,
-        updated_by,
-        created_at,
-        updated_at
-      from lobehub_admin.project_documents
-      where project_id = $1
-        and status = 'published'
-      order by is_entry desc, sort_order asc, updated_at desc
-      `,
-      [params.projectId],
-    )).rows.map(mapProjectKnowledgeDocument);
-
-    const globalDocs = (await fetchPublishedGlobalDocuments()).map(mapGlobalDocument);
-    const allDocs = [...projectDocs, ...globalDocs];
-
-    if (allDocs.length <= 1) {
-      return {
-        documents: allDocs.slice(0, 1),
-        meta: {
-          globalDocumentCount: publishedGlobalDocumentCount,
-          publishedDocumentCount,
-          question,
-          strategy: 'single-document-direct',
-        },
-      };
-    }
-
-    const matched = await query<ProjectDocumentSearchRow>(
-      `
-      select
-        id,
-        project_id,
-        slug,
-        title,
-        description,
-        content_md,
-        status,
-        sort_order,
-        is_entry,
-        updated_at,
-        ts_rank_cd(
-          to_tsvector(
-            'simple',
-            coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(content_md, '')
-          ),
-          plainto_tsquery('simple', $2)
-        ) as rank_score
-      from lobehub_admin.project_documents
-      where project_id = $1
-        and status = 'published'
-        and to_tsvector(
-          'simple',
-          coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || coalesce(content_md, '')
-        ) @@ plainto_tsquery('simple', $2)
-      order by rank_score desc, is_entry desc, sort_order asc, updated_at desc
-      limit 3
-      `,
-      [params.projectId, question],
-    );
-
-    if (matched.rows.length > 0) {
-      return {
-        documents: matched.rows.map((row) => mapDocument(row as unknown as ProjectDocumentRow)),
-        meta: {
-          globalDocumentCount: publishedGlobalDocumentCount,
-          matchedDocumentCount: matched.rows.length,
-          publishedDocumentCount,
-          question,
-          strategy: 'fts-match',
-        },
-      };
-    }
-
-    const fallbackTerms = extractSearchTerms(question);
-
-    if (fallbackTerms.length > 0) {
-      const fuzzy = allDocs
-        .map((doc) => ({ doc, score: scoreKnowledgeDocument(doc, fallbackTerms) }))
-        .filter((item) => item.score > (item.doc.knowledgeScope === 'project' ? 100 : 10))
-        .sort((left, right) => right.score - left.score);
-
-      const fuzzyProject = fuzzy.filter((item) => item.doc.knowledgeScope === 'project');
-      const fuzzyGlobal = fuzzy.filter((item) => item.doc.knowledgeScope === 'global');
-      const mergedFuzzy = [
-        ...fuzzyProject.slice(0, 2),
-        ...fuzzyGlobal.slice(0, 1),
-        ...fuzzyProject.slice(2),
-        ...fuzzyGlobal.slice(1),
-      ]
-        .slice(0, 3)
-        .map((item) => item.doc);
-
-      if (mergedFuzzy.length > 0) {
-        return {
-          documents: mergedFuzzy,
-          meta: {
-            fallbackTerms,
-            globalDocumentCount: publishedGlobalDocumentCount,
-            matchedDocumentCount: mergedFuzzy.length,
-            publishedDocumentCount,
-            question,
-            strategy: 'fuzzy-like-match',
-          },
-        };
-      }
-    }
-
-    const fallback = [
-      ...projectDocs.filter((doc) => doc.isEntry),
-      ...globalDocs.filter((doc) => doc.isEntry || doc.slug.startsWith('00-')),
-    ].slice(0, 3);
-
-    return {
-      documents: fallback,
-      meta: {
-        fallbackToContext: true,
-        globalDocumentCount: publishedGlobalDocumentCount,
-        matchedDocumentCount: 0,
-        publishedDocumentCount,
-        question,
-        strategy: 'fallback-entry-docs',
-      },
-    };
+    return queryUnifiedKnowledgeDocuments(params.projectId, body.question?.trim() ?? '');
   });
 
   app.post('/public/project-knowledge/:projectId/:signature/search', async (request) => {

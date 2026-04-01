@@ -4,6 +4,7 @@ import {
   authenticateAdminLogin,
   clearAdminSessionCookie,
   createAdminSession,
+  getActorProjectBinding,
   getProjectAccessCounts,
   requireActor,
   revokeAdminSessionFromRequest,
@@ -24,6 +25,10 @@ function toActorContext(actor: {
       avatar: actor.avatar,
       displayName: actor.displayName,
     },
+    activeProjectId: null as string | null,
+    activeProjectName: null as string | null,
+    activeProjectRole: null as 'admin' | 'member' | null,
+    bindingStatus: actor.isSystemAdmin ? 'system_admin' as const : 'unbound' as const,
     isSystemAdmin: actor.isSystemAdmin,
     managedProjectCount,
     joinedProjectCount,
@@ -39,14 +44,23 @@ export async function registerSystemRoutes(app: FastifyInstance) {
 
     const loginResult = await authenticateAdminLogin(payload.email, payload.password);
     const session = await createAdminSession(loginResult.actor.id, request);
+    const binding = await getActorProjectBinding(loginResult.actor.id);
 
     setAdminSessionCookie(reply, session);
 
-    return toActorContext(
+    const context = toActorContext(
       loginResult.actor,
       loginResult.managedProjectCount,
       loginResult.joinedProjectCount,
     );
+
+    return {
+      ...context,
+      activeProjectId: binding.projectId,
+      activeProjectName: binding.projectName,
+      activeProjectRole: binding.projectRole,
+      bindingStatus: binding.status,
+    };
   });
 
   app.post('/api/auth/logout', async (request, reply) => {
@@ -58,7 +72,14 @@ export async function registerSystemRoutes(app: FastifyInstance) {
   app.get('/api/me/context', async (request) => {
     const actor = await requireActor(request);
     const accessCounts = await getProjectAccessCounts(actor.id);
+    const binding = await getActorProjectBinding(actor.id);
 
-    return toActorContext(actor, accessCounts.managedProjectCount, accessCounts.joinedProjectCount);
+    return {
+      ...toActorContext(actor, accessCounts.managedProjectCount, accessCounts.joinedProjectCount),
+      activeProjectId: binding.projectId,
+      activeProjectName: binding.projectName,
+      activeProjectRole: binding.projectRole,
+      bindingStatus: binding.status,
+    };
   });
 }

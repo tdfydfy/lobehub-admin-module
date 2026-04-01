@@ -47,12 +47,17 @@ function normalizeProject(project: ProjectSummary) {
 
 type NormalizedProject = ReturnType<typeof normalizeProject>;
 
-function getPreferredProjectId(projects: NormalizedProject[]) {
+function getPreferredProjectId(projects: NormalizedProject[], activeProjectId?: string | null) {
+  if (activeProjectId && projects.some((project) => project.id === activeProjectId)) {
+    return activeProjectId;
+  }
+
   return projects.find((project) => project.actorRole === 'admin')?.id ?? projects[0]?.id ?? '';
 }
 
 function getAccessFeedback(context: ActorContext, projects: NormalizedProject[]) {
   if (context.isSystemAdmin) return `已进入系统管理员后台：${context.actor.displayName}`;
+  if (context.bindingStatus === 'invalid_multi_project') return `当前账号绑定了多个项目，请联系管理员处理：${context.actor.displayName}`;
   if (context.managedProjectCount > 0) return `已进入项目工作台：${context.actor.displayName}`;
   if (projects.length > 0) return `已进入项目成员工作台：${context.actor.displayName}`;
   return `当前用户没有可访问项目：${context.actor.displayName}`;
@@ -1251,7 +1256,7 @@ export default function App() {
             ? ''
             : savedProjectId && normalizedProjects.some((project) => project.id === savedProjectId)
               ? savedProjectId
-              : getPreferredProjectId(normalizedProjects),
+              : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId),
         );
         setFeedback(getAccessFeedback(contextResult, normalizedProjects));
       } catch (error) {
@@ -1474,7 +1479,7 @@ export default function App() {
         ? selectedProjectId
         : contextResult.isSystemAdmin
           ? ''
-          : getPreferredProjectId(normalizedProjects);
+          : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId);
 
       setActorContext(contextResult);
       setProjects(normalizedProjects);

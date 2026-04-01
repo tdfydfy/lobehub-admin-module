@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { ensureSystemAdmin, getManagedProjectCount, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
+import { syncKnowledgePluginsForAllProjects } from '../project-document-plugin.js';
 
 type DocumentStatus = 'draft' | 'published' | 'archived';
 
@@ -205,9 +206,12 @@ export async function registerGlobalDocumentRoutes(app: FastifyInstance) {
     await ensureSystemAdmin(actor.id);
     const body = createGlobalDocumentSchema.parse(request.body);
     const slug = buildSlug(body.title, body.slug);
+    const client = await db.connect();
 
     try {
-      const result = await query<GlobalDocumentRow>(
+      await client.query('begin');
+
+      const result = await client.query<GlobalDocumentRow>(
         `
         insert into lobehub_admin.global_documents (
           slug,
@@ -247,16 +251,22 @@ export async function registerGlobalDocumentRoutes(app: FastifyInstance) {
         ],
       );
 
+      await syncKnowledgePluginsForAllProjects(client);
+      await client.query('commit');
+
       return reply.code(201).send({
         document: mapGlobalDocument(result.rows[0]),
       });
     } catch (error) {
+      await client.query('rollback');
       const pgError = error as Error & { code?: string };
       if (pgError.code === '23505') {
         throw createHttpError('当前全局文档 slug 已存在', 409);
       }
 
       throw error;
+    } finally {
+      client.release();
     }
   });
 
@@ -282,9 +292,12 @@ export async function registerGlobalDocumentRoutes(app: FastifyInstance) {
     const params = z.object({ documentId: z.string().min(1) }).parse(request.params);
     const body = updateGlobalDocumentSchema.parse(request.body);
     const slug = buildSlug(body.title, body.slug);
+    const client = await db.connect();
 
     try {
-      const result = await query<GlobalDocumentRow>(
+      await client.query('begin');
+
+      const result = await client.query<GlobalDocumentRow>(
         `
         update lobehub_admin.global_documents
         set
@@ -329,16 +342,22 @@ export async function registerGlobalDocumentRoutes(app: FastifyInstance) {
         throw createHttpError('Document not found', 404);
       }
 
+      await syncKnowledgePluginsForAllProjects(client);
+      await client.query('commit');
+
       return {
         document: mapGlobalDocument(document),
       };
     } catch (error) {
+      await client.query('rollback');
       const pgError = error as Error & { code?: string };
       if (pgError.code === '23505') {
         throw createHttpError('当前全局文档 slug 已存在', 409);
       }
 
       throw error;
+    } finally {
+      client.release();
     }
   });
 
@@ -346,20 +365,33 @@ export async function registerGlobalDocumentRoutes(app: FastifyInstance) {
     const actor = await requireActor(request);
     await ensureSystemAdmin(actor.id);
     const params = z.object({ documentId: z.string().min(1) }).parse(request.params);
+    const client = await db.connect();
 
-    const result = await query<{ id: string }>(
-      `
-      delete from lobehub_admin.global_documents
-      where id = $1
-      returning id
-      `,
-      [params.documentId],
-    );
+    try {
+      await client.query('begin');
 
-    if (!result.rows[0]) {
-      return reply.code(404).send({ message: 'Document not found' });
+      const result = await client.query<{ id: string }>(
+        `
+        delete from lobehub_admin.global_documents
+        where id = $1
+        returning id
+        `,
+        [params.documentId],
+      );
+
+      if (!result.rows[0]) {
+        await client.query('rollback');
+        return reply.code(404).send({ message: 'Document not found' });
+      }
+
+      await syncKnowledgePluginsForAllProjects(client);
+      await client.query('commit');
+      return reply.code(204).send();
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    return reply.code(204).send();
   });
 }

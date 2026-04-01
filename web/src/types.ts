@@ -7,6 +7,10 @@
 
 export type ActorContext = {
   actor: UserOption;
+  activeProjectId: string | null;
+  activeProjectName: string | null;
+  activeProjectRole: 'admin' | 'member' | null;
+  bindingStatus: 'system_admin' | 'bound' | 'unbound' | 'invalid_multi_project';
   isSystemAdmin: boolean;
   managedProjectCount: number;
   joinedProjectCount: number;

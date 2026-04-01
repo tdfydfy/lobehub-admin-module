@@ -8,22 +8,11 @@ type Queryable = {
   query: <T extends QueryResultRow>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
 };
 
-type ProjectTemplateRow = {
+type ProjectInfoRow = {
   project_id: string;
   project_name: string;
   template_user_id: string | null;
   template_agent_id: string | null;
-};
-
-type ProjectDocumentRow = {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  content_md: string;
-  is_entry: boolean;
-  sort_order: number;
-  updated_at: string;
 };
 
 type ProjectManagedAgentRow = {
@@ -37,6 +26,10 @@ type ProjectMemberUserRow = {
 };
 
 const EXCLUDED_AGENT_SLUGS = ['inbox', 'page-agent', 'agent-builder', 'group-agent-builder'];
+const KNOWLEDGE_PLUGIN_IDENTIFIER = 'lobehub-admin.knowledge';
+const LEGACY_PROJECT_KNOWLEDGE_PREFIX = 'lobehub-admin.project-knowledge.';
+const LEGACY_PROJECT_SKILL_PREFIX = 'lobehub-admin.project-docs.';
+const LEGACY_PROJECT_SKILL_NAME_PREFIX = 'project-docs-';
 
 export type ProjectDocumentPluginSyncResult = {
   documentCount: number;
@@ -62,6 +55,10 @@ function normalizePluginIdentifiers(value: unknown) {
   )];
 }
 
+function serializePluginIdentifiers(identifiers: string[]) {
+  return JSON.stringify([...new Set(identifiers.filter(Boolean))]);
+}
+
 function buildPluginIdentifiersValue(existing: unknown, identifier: string) {
   const identifiers = normalizePluginIdentifiers(existing);
 
@@ -69,53 +66,95 @@ function buildPluginIdentifiersValue(existing: unknown, identifier: string) {
     identifiers.push(identifier);
   }
 
-  return JSON.stringify(identifiers);
+  return serializePluginIdentifiers(identifiers);
+}
+
+function removePluginIdentifiersValue(
+  existing: unknown,
+  predicate: (identifier: string) => boolean,
+) {
+  return serializePluginIdentifiers(
+    normalizePluginIdentifiers(existing).filter((identifier) => !predicate(identifier)),
+  );
 }
 
 function removePluginIdentifierValue(existing: unknown, identifier: string) {
-  const identifiers = normalizePluginIdentifiers(existing).filter((item) => item !== identifier);
-  return JSON.stringify(identifiers);
+  return removePluginIdentifiersValue(existing, (item) => item === identifier);
+}
+
+function normalizeKnowledgePluginAgentState(existing: unknown) {
+  return normalizePluginIdentifiers(existing).filter(
+    (identifier) => !identifier.startsWith(LEGACY_PROJECT_KNOWLEDGE_PREFIX),
+  );
+}
+
+export function buildKnowledgePluginIdentifier() {
+  return KNOWLEDGE_PLUGIN_IDENTIFIER;
 }
 
 export function buildProjectKnowledgePluginIdentifier(projectId: string) {
-  return `lobehub-admin.project-knowledge.${projectId}`;
+  return `${LEGACY_PROJECT_KNOWLEDGE_PREFIX}${projectId}`;
 }
 
 function buildLegacyProjectSkillName(projectId: string) {
-  return `project-docs-${projectId}`;
+  return `${LEGACY_PROJECT_SKILL_NAME_PREFIX}${projectId}`;
 }
 
 function buildLegacyProjectSkillIdentifier(projectId: string) {
-  return `lobehub-admin.project-docs.${projectId}`;
+  return `${LEGACY_PROJECT_SKILL_PREFIX}${projectId}`;
 }
 
-function buildPluginSignature(projectId: string) {
+function buildScopedSignature(scopeKey: string) {
   if (!env.PROJECT_DOCS_PLUGIN_SECRET) {
     throw new Error('PROJECT_DOCS_PLUGIN_SECRET is not configured');
   }
 
-  return createHmac('sha256', env.PROJECT_DOCS_PLUGIN_SECRET).update(projectId).digest('hex');
+  return createHmac('sha256', env.PROJECT_DOCS_PLUGIN_SECRET).update(scopeKey).digest('hex');
 }
 
-function buildProjectKnowledgeApiDefinitions(
-  projectId: string,
+function buildKnowledgePluginSignature(userId: string) {
+  return buildScopedSignature(`knowledge:${userId}`);
+}
+
+function buildProjectKnowledgePluginSignature(projectId: string) {
+  return buildScopedSignature(`project:${projectId}`);
+}
+
+export function verifyKnowledgePluginSignature(userId: string, signature: string) {
+  return signature === buildKnowledgePluginSignature(userId);
+}
+
+export function verifyProjectKnowledgePluginSignature(projectId: string, signature: string) {
+  return signature === buildProjectKnowledgePluginSignature(projectId);
+}
+
+function getPluginPublicBaseUrl() {
+  const value = env.PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL?.trim();
+  return value ? value.replace(/\/+$/, '') : null;
+}
+
+function buildKnowledgePluginApiDefinitions(
+  userId: string,
   signature: string,
   projectName: string,
-  documentCount: number,
+  projectDocumentCount: number,
+  globalDocumentCount: number,
   publicBaseUrl: string,
 ) {
-  const baseUrl = `${publicBaseUrl}/public/project-knowledge/${projectId}/${signature}`;
-  const apis: Array<Record<string, unknown>> = [
+  const baseUrl = `${publicBaseUrl}/public/knowledge/${userId}/${signature}`;
+  const totalDocumentCount = projectDocumentCount + globalDocumentCount;
+
+  return [
     {
       description:
-        documentCount <= 1
-          ? `Answer any project-specific question for ${projectName} using the shared project knowledge. Use this first before any other knowledge or web search. There is currently only one published project document, so this tool already includes the full available project knowledge.`
-          : `Answer any project-specific question for ${projectName} using the shared project knowledge. Use this first before any other knowledge or web search.`,
-      name: 'queryProjectKnowledge',
+        totalDocumentCount <= 1
+          ? `Answer any project question for ${projectName} using the current project knowledge and shared global knowledge. Use this first before any other knowledge or web search.`
+          : `Answer any project question for ${projectName} using the current project knowledge and shared global knowledge. Use this first before any other knowledge or web search.`,
+      name: 'queryKnowledge',
       parameters: {
         properties: {
           question: {
-            description: 'The user question about the project.',
+            description: 'The user question about the current project.',
             type: 'string',
           },
         },
@@ -125,73 +164,49 @@ function buildProjectKnowledgeApiDefinitions(
       url: `${baseUrl}/query`,
     },
   ];
-
-  return apis;
 }
 
-export function verifyProjectKnowledgePluginSignature(projectId: string, signature: string) {
-  return signature === buildPluginSignature(projectId);
-}
-
-function getPluginPublicBaseUrl() {
-  const value = env.PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL?.trim();
-  return value ? value.replace(/\/+$/, '') : null;
-}
-
-function buildPluginManifest(projectId: string, projectName: string) {
-  const publicBaseUrl = getPluginPublicBaseUrl();
-
-  if (!publicBaseUrl) return null;
-
-  const identifier = buildProjectKnowledgePluginIdentifier(projectId);
-  const signature = buildPluginSignature(projectId);
-  return {
-    identifier,
-    publicBaseUrl,
-    signature,
-  };
-}
-
-function createPluginManifest(
-  projectId: string,
+function createKnowledgePluginManifest(
+  userId: string,
   projectName: string,
-  documentCount: number,
+  projectDocumentCount: number,
+  globalDocumentCount: number,
   publicBaseUrl: string,
-  signature: string,
 ) {
-  const identifier = buildProjectKnowledgePluginIdentifier(projectId);
+  const signature = buildKnowledgePluginSignature(userId);
 
   return {
-    api: buildProjectKnowledgeApiDefinitions(
-      projectId,
+    api: buildKnowledgePluginApiDefinitions(
+      userId,
       signature,
       projectName,
-      documentCount,
+      projectDocumentCount,
+      globalDocumentCount,
       publicBaseUrl,
     ),
-    identifier,
+    identifier: buildKnowledgePluginIdentifier(),
     meta: {
-      avatar: '📚',
-      description: `Shared project knowledge for ${projectName}.`,
-      title: `${projectName} Knowledge`,
+      avatar: '知识',
+      description: `当前项目与全局共享知识：${projectName}`,
+      title: '统一知识库',
     },
     type: 'default',
     version: '1',
   };
 }
 
-async function fetchProjectTemplate(executeQuery: Queryable, projectId: string) {
-  const result = await executeQuery.query<ProjectTemplateRow>(
+async function fetchProjectInfo(executeQuery: Queryable, projectId: string) {
+  const result = await executeQuery.query<ProjectInfoRow>(
     `
     select
-      pt.project_id,
+      p.id as project_id,
       p.name as project_name,
       pt.template_user_id,
       pt.template_agent_id
-    from lobehub_admin.project_templates pt
-    join lobehub_admin.projects p
-      on p.id = pt.project_id
-    where pt.project_id = $1
+    from lobehub_admin.projects p
+    left join lobehub_admin.project_templates pt
+      on pt.project_id = p.id
+    where p.id = $1
     limit 1
     `,
     [projectId],
@@ -200,33 +215,33 @@ async function fetchProjectTemplate(executeQuery: Queryable, projectId: string) 
   return result.rows[0] ?? null;
 }
 
-async function fetchPublishedDocuments(executeQuery: Queryable, projectId: string) {
-  const result = await executeQuery.query<ProjectDocumentRow>(
+async function fetchPublishedProjectDocumentCount(executeQuery: Queryable, projectId: string) {
+  const result = await executeQuery.query<{ count: string }>(
     `
-    select
-      id,
-      slug,
-      title,
-      description,
-      content_md,
-      is_entry,
-      sort_order,
-      updated_at
+    select count(*)::text as count
     from lobehub_admin.project_documents
     where project_id = $1
       and status = 'published'
-    order by
-      is_entry desc,
-      sort_order asc,
-      updated_at desc
     `,
     [projectId],
   );
 
-  return result.rows;
+  return Number(result.rows[0]?.count ?? 0);
 }
 
-async function fetchTargetUsers(executeQuery: Queryable, projectId: string, templateUserId: string) {
+async function fetchPublishedGlobalDocumentCount(executeQuery: Queryable) {
+  const result = await executeQuery.query<{ count: string }>(
+    `
+    select count(*)::text as count
+    from lobehub_admin.global_documents
+    where status = 'published'
+    `,
+  );
+
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+async function fetchTargetUsers(executeQuery: Queryable, projectId: string) {
   const result = await executeQuery.query<ProjectMemberUserRow>(
     `
     select user_id
@@ -237,10 +252,12 @@ async function fetchTargetUsers(executeQuery: Queryable, projectId: string, temp
     [projectId],
   );
 
-  return [...new Set([templateUserId, ...result.rows.map((row) => row.user_id)])];
+  return [...new Set(result.rows.map((row) => row.user_id))];
 }
 
-async function fetchManagedAgents(executeQuery: Queryable, projectId: string, templateAgentId: string) {
+async function fetchAgentsForUsers(executeQuery: Queryable, userIds: string[]) {
+  if (userIds.length === 0) return [] as ProjectManagedAgentRow[];
+
   const result = await executeQuery.query<ProjectManagedAgentRow>(
     `
     select
@@ -248,83 +265,27 @@ async function fetchManagedAgents(executeQuery: Queryable, projectId: string, te
       a.user_id,
       a.plugins
     from public.agents a
-    where a.id = $2
-    union all
-    select
-      a.id,
-      a.user_id,
-      a.plugins
-    from lobehub_admin.project_managed_agents pma
-    join public.agents a
-      on a.id = pma.managed_agent_id
-    where pma.project_id = $1
-      and pma.managed_agent_id is not null
-    union all
-    select
-      a.id,
-      a.user_id,
-      a.plugins
-    from lobehub_admin.project_members pm
-    join public.agents a
-      on a.user_id = pm.user_id
-    where pm.project_id = $1
-      and pm.role = 'admin'
-      and coalesce(a.slug, '') <> all($3::text[])
+    where a.user_id = any($1::text[])
+      and coalesce(a.slug, '') <> all($2::text[])
+    order by a.user_id asc, a.updated_at desc
     `,
-    [projectId, templateAgentId, EXCLUDED_AGENT_SLUGS],
-  );
-
-  const seen = new Set<string>();
-
-  return result.rows.filter((row) => {
-    if (seen.has(row.id)) return false;
-    seen.add(row.id);
-    return true;
-  });
-}
-
-async function fetchUsersWithInstalledPlugin(
-  executeQuery: Queryable,
-  identifier: string,
-) {
-  const result = await executeQuery.query<ProjectMemberUserRow>(
-    `
-    select distinct user_id
-    from public.user_installed_plugins
-    where identifier = $1
-    `,
-    [identifier],
-  );
-
-  return result.rows.map((row) => row.user_id);
-}
-
-async function fetchAgentsWithPlugin(
-  executeQuery: Queryable,
-  identifier: string,
-) {
-  const result = await executeQuery.query<ProjectManagedAgentRow>(
-    `
-    select
-      id,
-      user_id,
-      plugins
-    from public.agents
-    where coalesce(plugins, '[]'::jsonb) ? $1
-    `,
-    [identifier],
+    [userIds, EXCLUDED_AGENT_SLUGS],
   );
 
   return result.rows;
 }
 
+async function fetchTargetAgents(executeQuery: Queryable, projectId: string) {
+  const users = await fetchTargetUsers(executeQuery, projectId);
+  return fetchAgentsForUsers(executeQuery, users);
+}
+
 async function upsertInstalledPluginForUsers(
   executeQuery: Queryable,
-  users: string[],
+  installations: Array<{ manifest: Record<string, unknown>; userId: string }>,
   identifier: string,
-  manifest: Record<string, unknown>,
 ) {
-  for (const userId of users) {
+  for (const installation of installations) {
     await executeQuery.query(
       `
       insert into public.user_installed_plugins (
@@ -361,7 +322,7 @@ async function upsertInstalledPluginForUsers(
         accessed_at = now(),
         source = excluded.source
       `,
-      [userId, identifier, JSON.stringify(manifest)],
+      [installation.userId, identifier, JSON.stringify(installation.manifest)],
     );
   }
 }
@@ -380,6 +341,22 @@ async function removeInstalledPluginForUsers(
       and identifier = $2
     `,
     [users, identifier],
+  );
+}
+
+async function removeLegacyProjectInstalledPluginsForUsers(
+  executeQuery: Queryable,
+  users: string[],
+) {
+  if (users.length === 0) return;
+
+  await executeQuery.query(
+    `
+    delete from public.user_installed_plugins
+    where user_id = any($1::text[])
+      and identifier like $2
+    `,
+    [users, `${LEGACY_PROJECT_KNOWLEDGE_PREFIX}%`],
   );
 }
 
@@ -421,6 +398,30 @@ async function removeAgentPlugins(
   }
 }
 
+async function removeLegacyProjectPluginsFromAgents(
+  executeQuery: Queryable,
+  agents: ProjectManagedAgentRow[],
+) {
+  for (const agent of agents) {
+    await executeQuery.query(
+      `
+      update public.agents
+      set
+        plugins = $2::jsonb,
+        updated_at = now()
+      where id = $1
+      `,
+      [
+        agent.id,
+        removePluginIdentifiersValue(
+          agent.plugins,
+          (identifier) => identifier.startsWith(LEGACY_PROJECT_KNOWLEDGE_PREFIX),
+        ),
+      ],
+    );
+  }
+}
+
 async function removeLegacyProjectSkills(
   executeQuery: Queryable,
   users: string[],
@@ -441,15 +442,72 @@ async function removeLegacyProjectSkills(
   );
 }
 
+async function removeAllLegacyProjectSkillsForUsers(
+  executeQuery: Queryable,
+  users: string[],
+) {
+  if (users.length === 0) return;
+
+  await executeQuery.query(
+    `
+    delete from public.agent_skills
+    where user_id = any($1::text[])
+      and (
+        name like $2
+        or identifier like $3
+      )
+    `,
+    [users, `${LEGACY_PROJECT_SKILL_NAME_PREFIX}%`, `${LEGACY_PROJECT_SKILL_PREFIX}%`],
+  );
+}
+
+export async function removeKnowledgePluginForUsers(
+  executeQuery: Queryable,
+  users: string[],
+) {
+  if (users.length === 0) return;
+
+  const userAgents = await fetchAgentsForUsers(executeQuery, users);
+
+  await removeInstalledPluginForUsers(executeQuery, users, buildKnowledgePluginIdentifier());
+  await removeLegacyProjectInstalledPluginsForUsers(executeQuery, users);
+  await removeAgentPlugins(executeQuery, userAgents, buildKnowledgePluginIdentifier());
+  await removeLegacyProjectPluginsFromAgents(executeQuery, userAgents);
+  await removeAllLegacyProjectSkillsForUsers(executeQuery, users);
+}
+
+async function fetchProjectIdsWithMembers(executeQuery: Queryable) {
+  const result = await executeQuery.query<{ project_id: string }>(
+    `
+    select distinct pm.project_id
+    from lobehub_admin.project_members pm
+    order by pm.project_id asc
+    `,
+  );
+
+  return result.rows.map((row) => row.project_id);
+}
+
+export async function syncKnowledgePluginsForAllProjects(executeQuery: Queryable) {
+  const projectIds = await fetchProjectIdsWithMembers(executeQuery);
+  const results: ProjectDocumentPluginSyncResult[] = [];
+
+  for (const projectId of projectIds) {
+    results.push(await syncProjectDocumentPlugin(executeQuery, projectId));
+  }
+
+  return results;
+}
+
 export async function syncProjectDocumentPlugin(
   executeQuery: Queryable,
   projectId: string,
 ): Promise<ProjectDocumentPluginSyncResult> {
-  const template = await fetchProjectTemplate(executeQuery, projectId);
-  const identifier = buildProjectKnowledgePluginIdentifier(projectId);
+  const project = await fetchProjectInfo(executeQuery, projectId);
+  const identifier = buildKnowledgePluginIdentifier();
   const publicBaseUrl = getPluginPublicBaseUrl();
 
-  if (!template?.template_user_id || !template.template_agent_id) {
+  if (!project) {
     return {
       documentCount: 0,
       managedAgentCount: 0,
@@ -457,9 +515,9 @@ export async function syncProjectDocumentPlugin(
       projectId,
       publicBaseUrl,
       skipped: true,
-      skippedReason: 'template-not-configured',
-      templateAgentId: template?.template_agent_id ?? null,
-      templateUserId: template?.template_user_id ?? null,
+      skippedReason: 'project-not-found',
+      templateAgentId: null,
+      templateUserId: null,
       updatedPluginUserCount: 0,
     };
   }
@@ -473,82 +531,73 @@ export async function syncProjectDocumentPlugin(
       publicBaseUrl,
       skipped: true,
       skippedReason: 'plugin-public-url-or-secret-not-configured',
-      templateAgentId: template.template_agent_id,
-      templateUserId: template.template_user_id,
+      templateAgentId: project.template_agent_id,
+      templateUserId: project.template_user_id,
       updatedPluginUserCount: 0,
     };
   }
 
-  const documents = await fetchPublishedDocuments(executeQuery, projectId);
-  const targetUsers = await fetchTargetUsers(executeQuery, projectId, template.template_user_id);
-  const targetAgents = await fetchManagedAgents(executeQuery, projectId, template.template_agent_id);
-  const existingPluginUsers = await fetchUsersWithInstalledPlugin(executeQuery, identifier);
-  const existingPluginAgents = await fetchAgentsWithPlugin(executeQuery, identifier);
-  const legacySkillIdentifier = buildLegacyProjectSkillIdentifier(projectId);
-  const staleUsers = existingPluginUsers.filter((userId) => !targetUsers.includes(userId));
-  const staleAgents = existingPluginAgents.filter((agent) => !targetAgents.some((target) => target.id === agent.id));
+  const targetUsers = await fetchTargetUsers(executeQuery, projectId);
+  const targetAgents = await fetchTargetAgents(executeQuery, projectId);
+  const projectDocumentCount = await fetchPublishedProjectDocumentCount(executeQuery, projectId);
+  const globalDocumentCount = await fetchPublishedGlobalDocumentCount(executeQuery);
+  const normalizedTargetAgents = targetAgents.map((agent) => ({
+    ...agent,
+    plugins: normalizeKnowledgePluginAgentState(agent.plugins),
+  }));
 
   await removeLegacyProjectSkills(executeQuery, targetUsers, projectId);
-  await removeAgentPlugins(executeQuery, targetAgents, legacySkillIdentifier);
-  await removeInstalledPluginForUsers(executeQuery, staleUsers, identifier);
-  await removeAgentPlugins(executeQuery, staleAgents, identifier);
+  await removeInstalledPluginForUsers(executeQuery, targetUsers, buildProjectKnowledgePluginIdentifier(projectId));
+  await removeAgentPlugins(executeQuery, targetAgents, buildProjectKnowledgePluginIdentifier(projectId));
+  await removeLegacyProjectInstalledPluginsForUsers(executeQuery, targetUsers);
+  await removeLegacyProjectPluginsFromAgents(executeQuery, targetAgents);
 
-  if (documents.length === 0) {
-    await removeAgentPlugins(executeQuery, [...targetAgents, ...staleAgents], identifier);
-    await removeInstalledPluginForUsers(executeQuery, [...targetUsers, ...staleUsers], identifier);
+  const totalDocumentCount = projectDocumentCount + globalDocumentCount;
+
+  if (totalDocumentCount === 0) {
+    await removeInstalledPluginForUsers(executeQuery, targetUsers, identifier);
+    await removeAgentPlugins(executeQuery, normalizedTargetAgents, identifier);
 
     return {
-      documentCount: 0,
+      documentCount: totalDocumentCount,
       managedAgentCount: targetAgents.length,
       pluginIdentifier: identifier,
       projectId,
       publicBaseUrl,
       skipped: false,
       skippedReason: null,
-      templateAgentId: template.template_agent_id,
-      templateUserId: template.template_user_id,
+      templateAgentId: project.template_agent_id,
+      templateUserId: project.template_user_id,
       updatedPluginUserCount: 0,
     };
   }
 
-  const manifestContext = buildPluginManifest(projectId, template.project_name);
-
-  if (!manifestContext) {
-    return {
-      documentCount: documents.length,
-      managedAgentCount: targetAgents.length,
-      pluginIdentifier: identifier,
-      projectId,
-      publicBaseUrl,
-      skipped: true,
-      skippedReason: 'manifest-build-failed',
-      templateAgentId: template.template_agent_id,
-      templateUserId: template.template_user_id,
-      updatedPluginUserCount: 0,
-    };
-  }
-
-  const manifest = createPluginManifest(
-    projectId,
-    template.project_name,
-    documents.length,
-    manifestContext.publicBaseUrl,
-    manifestContext.signature,
+  await upsertInstalledPluginForUsers(
+    executeQuery,
+    targetUsers.map((userId) => ({
+      manifest: createKnowledgePluginManifest(
+        userId,
+        project.project_name,
+        projectDocumentCount,
+        globalDocumentCount,
+        publicBaseUrl,
+      ),
+      userId,
+    })),
+    identifier,
   );
-
-  await upsertInstalledPluginForUsers(executeQuery, targetUsers, identifier, manifest);
-  await ensureAgentPlugins(executeQuery, targetAgents, identifier);
+  await ensureAgentPlugins(executeQuery, normalizedTargetAgents, identifier);
 
   return {
-    documentCount: documents.length,
+    documentCount: totalDocumentCount,
     managedAgentCount: targetAgents.length,
     pluginIdentifier: identifier,
     projectId,
     publicBaseUrl,
     skipped: false,
     skippedReason: null,
-    templateAgentId: template.template_agent_id,
-    templateUserId: template.template_user_id,
+    templateAgentId: project.template_agent_id,
+    templateUserId: project.template_user_id,
     updatedPluginUserCount: targetUsers.length,
   };
 }
