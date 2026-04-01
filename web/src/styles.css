@@ -185,8 +185,18 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   color: var(--brand-deep);
   font-weight: 700;
 }
-.system-header { margin-bottom: 18px; }
-.system-tabs { align-items: center; flex-wrap: wrap; }
+.system-header {
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+}
+.system-tabs {
+  align-items: center;
+  flex-wrap: wrap;
+  position: relative;
+  overflow: visible;
+}
 .system-badge {
   display: inline-flex;
   align-items: center;
@@ -207,6 +217,7 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
 }
 .system-switcher {
   position: relative;
+  z-index: 40;
 }
 .system-switcher-menu {
   position: absolute;
@@ -223,7 +234,7 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   border-radius: 16px;
   background: rgba(255, 250, 246, 0.98);
   box-shadow: var(--shadow);
-  z-index: 10;
+  z-index: 120;
 }
 .system-switcher-item {
   width: 100%;
