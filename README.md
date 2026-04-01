@@ -1,5 +1,29 @@
 # LobeHub Admin Module
 
+## Update 2026-04-01
+
+- 知识链路已从“按项目插件”收敛为“按账号唯一项目归属的统一知识插件”：
+  - 统一插件标识：`lobehub-admin.knowledge`
+  - 统一公开查询入口：`/public/knowledge/:userId/:signature/query`
+  - 后端按普通账号唯一绑定项目自动路由到：
+    - 当前项目文档
+    - 全局文档
+- 非系统管理员当前采用“单账号单项目”规则：
+  - 一个账号只能绑定一个项目
+  - 一个账号在项目内只能有一个角色
+  - 系统管理员是唯一跨项目例外
+  - 新增 SQL：`sql/013_single_project_binding.sql`
+- 登录上下文已补充唯一项目信息：
+  - `activeProjectId`
+  - `activeProjectName`
+  - `activeProjectRole`
+  - `bindingStatus`
+- Web / Mobile 工作台对普通账号优先使用唯一项目上下文，不再依赖本地缓存猜测项目。
+- 测试环境 `ali-temp` 已完成验证：
+  - 单项目约束生效
+  - 统一知识插件已安装到项目账号
+  - 统一知识接口已可返回项目文档与全局文档结果
+
 ## Update 2026-03-31
 
 - 新增“知识域”能力：

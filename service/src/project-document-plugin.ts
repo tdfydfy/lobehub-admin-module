@@ -4,9 +4,16 @@ import type { QueryResultRow } from 'pg';
 
 import { env } from './config.js';
 
-type Queryable = {
-  query: <T extends QueryResultRow>(text: string, values?: unknown[]) => Promise<{ rows: T[] }>;
-};
+type QueryRunner = <T extends QueryResultRow>(
+  text: string,
+  values?: unknown[],
+) => Promise<{ rows: T[] }>;
+
+type Queryable =
+  | QueryRunner
+  | {
+    query: QueryRunner;
+  };
 
 type ProjectInfoRow = {
   project_id: string;
@@ -43,6 +50,18 @@ export type ProjectDocumentPluginSyncResult = {
   templateUserId: string | null;
   updatedPluginUserCount: number;
 };
+
+async function runQuery<T extends QueryResultRow>(
+  executeQuery: Queryable,
+  text: string,
+  values?: unknown[],
+) {
+  if (typeof executeQuery === 'function') {
+    return executeQuery<T>(text, values);
+  }
+
+  return executeQuery.query<T>(text, values);
+}
 
 function normalizePluginIdentifiers(value: unknown) {
   if (!Array.isArray(value)) return [] as string[];
@@ -83,8 +102,9 @@ function removePluginIdentifierValue(existing: unknown, identifier: string) {
 }
 
 function normalizeKnowledgePluginAgentState(existing: unknown) {
-  return normalizePluginIdentifiers(existing).filter(
-    (identifier) => !identifier.startsWith(LEGACY_PROJECT_KNOWLEDGE_PREFIX),
+  return removePluginIdentifiersValue(
+    existing,
+    (identifier) => identifier.startsWith(LEGACY_PROJECT_KNOWLEDGE_PREFIX),
   );
 }
 
@@ -196,7 +216,8 @@ function createKnowledgePluginManifest(
 }
 
 async function fetchProjectInfo(executeQuery: Queryable, projectId: string) {
-  const result = await executeQuery.query<ProjectInfoRow>(
+  const result = await runQuery<ProjectInfoRow>(
+    executeQuery,
     `
     select
       p.id as project_id,
@@ -216,7 +237,8 @@ async function fetchProjectInfo(executeQuery: Queryable, projectId: string) {
 }
 
 async function fetchPublishedProjectDocumentCount(executeQuery: Queryable, projectId: string) {
-  const result = await executeQuery.query<{ count: string }>(
+  const result = await runQuery<{ count: string }>(
+    executeQuery,
     `
     select count(*)::text as count
     from lobehub_admin.project_documents
@@ -230,7 +252,8 @@ async function fetchPublishedProjectDocumentCount(executeQuery: Queryable, proje
 }
 
 async function fetchPublishedGlobalDocumentCount(executeQuery: Queryable) {
-  const result = await executeQuery.query<{ count: string }>(
+  const result = await runQuery<{ count: string }>(
+    executeQuery,
     `
     select count(*)::text as count
     from lobehub_admin.global_documents
@@ -242,7 +265,8 @@ async function fetchPublishedGlobalDocumentCount(executeQuery: Queryable) {
 }
 
 async function fetchTargetUsers(executeQuery: Queryable, projectId: string) {
-  const result = await executeQuery.query<ProjectMemberUserRow>(
+  const result = await runQuery<ProjectMemberUserRow>(
+    executeQuery,
     `
     select user_id
     from lobehub_admin.project_members
@@ -258,7 +282,8 @@ async function fetchTargetUsers(executeQuery: Queryable, projectId: string) {
 async function fetchAgentsForUsers(executeQuery: Queryable, userIds: string[]) {
   if (userIds.length === 0) return [] as ProjectManagedAgentRow[];
 
-  const result = await executeQuery.query<ProjectManagedAgentRow>(
+  const result = await runQuery<ProjectManagedAgentRow>(
+    executeQuery,
     `
     select
       a.id,
@@ -286,7 +311,8 @@ async function upsertInstalledPluginForUsers(
   identifier: string,
 ) {
   for (const installation of installations) {
-    await executeQuery.query(
+    await runQuery(
+      executeQuery,
       `
       insert into public.user_installed_plugins (
         user_id,
@@ -334,7 +360,8 @@ async function removeInstalledPluginForUsers(
 ) {
   if (users.length === 0) return;
 
-  await executeQuery.query(
+  await runQuery(
+    executeQuery,
     `
     delete from public.user_installed_plugins
     where user_id = any($1::text[])
@@ -350,7 +377,8 @@ async function removeLegacyProjectInstalledPluginsForUsers(
 ) {
   if (users.length === 0) return;
 
-  await executeQuery.query(
+  await runQuery(
+    executeQuery,
     `
     delete from public.user_installed_plugins
     where user_id = any($1::text[])
@@ -366,7 +394,8 @@ async function ensureAgentPlugins(
   identifier: string,
 ) {
   for (const agent of agents) {
-    await executeQuery.query(
+    await runQuery(
+      executeQuery,
       `
       update public.agents
       set
@@ -385,7 +414,8 @@ async function removeAgentPlugins(
   identifier: string,
 ) {
   for (const agent of agents) {
-    await executeQuery.query(
+    await runQuery(
+      executeQuery,
       `
       update public.agents
       set
@@ -403,7 +433,8 @@ async function removeLegacyProjectPluginsFromAgents(
   agents: ProjectManagedAgentRow[],
 ) {
   for (const agent of agents) {
-    await executeQuery.query(
+    await runQuery(
+      executeQuery,
       `
       update public.agents
       set
@@ -411,13 +442,7 @@ async function removeLegacyProjectPluginsFromAgents(
         updated_at = now()
       where id = $1
       `,
-      [
-        agent.id,
-        removePluginIdentifiersValue(
-          agent.plugins,
-          (identifier) => identifier.startsWith(LEGACY_PROJECT_KNOWLEDGE_PREFIX),
-        ),
-      ],
+      [agent.id, normalizeKnowledgePluginAgentState(agent.plugins)],
     );
   }
 }
@@ -429,7 +454,8 @@ async function removeLegacyProjectSkills(
 ) {
   if (users.length === 0) return;
 
-  await executeQuery.query(
+  await runQuery(
+    executeQuery,
     `
     delete from public.agent_skills
     where user_id = any($1::text[])
@@ -448,7 +474,8 @@ async function removeAllLegacyProjectSkillsForUsers(
 ) {
   if (users.length === 0) return;
 
-  await executeQuery.query(
+  await runQuery(
+    executeQuery,
     `
     delete from public.agent_skills
     where user_id = any($1::text[])
@@ -477,7 +504,8 @@ export async function removeKnowledgePluginForUsers(
 }
 
 async function fetchProjectIdsWithMembers(executeQuery: Queryable) {
-  const result = await executeQuery.query<{ project_id: string }>(
+  const result = await runQuery<{ project_id: string }>(
+    executeQuery,
     `
     select distinct pm.project_id
     from lobehub_admin.project_members pm

@@ -1,5 +1,29 @@
 # 独立部署说明
 
+## 2026-04-01 补充
+
+本次版本新增两项关键部署动作：
+
+1. 统一知识插件
+- 服务端统一知识入口：`/public/knowledge/:userId/:signature/query`
+- 统一插件标识：`lobehub-admin.knowledge`
+- 升级后建议执行一次统一知识重建，清理旧的项目级知识插件残留
+
+2. 单账号单项目约束
+- 需执行：`sql/013_single_project_binding.sql`
+- 该约束仅对非系统管理员生效
+
+推荐升级顺序：
+
+1. 上传并覆盖 `service/` 与 `web/dist`
+2. 执行 `sql/013_single_project_binding.sql`
+3. 重建并重启管理端服务
+4. 执行一次统一知识重建
+5. 抽样验证：
+   - `/admin-api/health`
+   - 普通账号登录后 `/api/me/context`
+   - 统一知识接口 `/public/knowledge/.../query`
+
 ## 1. 模块结构
 
 本管理模块分成三部分：
