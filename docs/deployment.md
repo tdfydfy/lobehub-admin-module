@@ -42,6 +42,8 @@
 - `lobehub-admin-module/sql/008_customer_analysis_chat.sql`
 - `lobehub-admin-module/sql/009_customer_analysis_jobs.sql`
 - `lobehub-admin-module/sql/010_project_topic_daily_facts.sql`
+- `lobehub-admin-module/sql/011_project_documents.sql`
+- `lobehub-admin-module/sql/012_global_documents.sql`
 
 本地 Docker `postgres` 环境优先使用：
 
@@ -60,6 +62,8 @@
 - `008` 用于补齐自由盘点会话与消息表。
 - `009` 用于补齐自由盘点任务表，支持提交任务后后台执行与轮询状态。
 - `010` 用于补齐项目经营事实表 `project_topic_daily_facts` 与 `project_daily_overview_view`。
+- `011` 用于补齐项目文档表、全文检索索引与更新时间触发器。
+- `012` 用于补齐全局知识文档表、全文检索索引与更新时间触发器。
 
 如果需要单独执行某一份 SQL，再回退使用：
 
@@ -71,6 +75,8 @@
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/008_customer_analysis_chat.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/009_customer_analysis_jobs.sql"
 .\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/010_project_topic_daily_facts.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/011_project_documents.sql"
+.\lobehub-admin-module\scripts\apply-project-admin-core.ps1 -SqlFile "lobehub-admin-module/sql/012_global_documents.sql"
 ```
 
 ### 2.2 如需关闭旧的全局自动下发
@@ -328,6 +334,14 @@ npm run build
   - 项目管理员仅可查看 `crm`
   - 项目管理员仅读取 `project = 自己所在项目名称` 的数据
   - 若表中没有 `project` 字段，则返回空数据
+- 项目文档
+  - 首页项目详情页已接入“项目文档”标签
+  - 支持项目管理员维护 Markdown 文档
+  - 后端已提供内部知识接口与共享知识插件接口
+- 全局知识文档
+  - 系统管理页已接入 `Global Docs`
+  - 系统管理员可维护全局知识文档
+  - 项目管理员可只读查看全局知识
 - 所有前端时间默认按东八区显示
 
 ## 8. 当前未完成能力

@@ -4,6 +4,25 @@
 
 ## 0.2 2026-03-31 更新
 
+- 知识域与知识文档：
+  - 已新增项目知识域 `project_documents`
+  - 已新增全局知识域 `global_documents`
+  - 两个知识域都支持 Markdown 文档
+  - 两个知识域约定使用 `00-map` 作为知识地图文档
+  - 项目详情页新增“项目文档”标签
+  - 系统管理页新增 `Global Docs`
+  - 项目管理员可维护项目知识文档
+  - 项目管理员可只读查看全局知识文档
+  - 当前已新增：
+    - `sql/011_project_documents.sql`
+    - `sql/012_global_documents.sql`
+
+- 项目知识插件：
+  - 项目知识插件已从旧的多步读取形态收敛为单一高层工具
+    - `queryProjectKnowledge`
+  - 当前已实现“项目文档 -> 项目知识插件安装记录”自动同步
+  - 项目查询已支持“项目知识优先、全局知识补充”
+
 - 多项目管理与经营事实层：
   - 已新增 `project_topic_daily_facts`
   - 已新增 `project_daily_overview_view`

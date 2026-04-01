@@ -11,6 +11,11 @@
   PortfolioProjectsResult,
   PortfolioSummaryResult,
   CreateProjectCustomerAnalysisJobResult,
+  GlobalDocument,
+  GlobalDocumentListItem,
+  ProjectDocument,
+  ProjectDocumentListItem,
+  ProjectDocumentStatus,
   ProjectMember,
   ProjectMemberAssistantDetail,
   ProjectCustomerAnalysisJob,
@@ -150,6 +155,67 @@ export const api = {
       actorId,
     }),
 
+  listGlobalDocuments: async (
+    actorId: string,
+    status: 'all' | ProjectDocumentStatus = 'all',
+  ) =>
+    request<{ documents: GlobalDocumentListItem[] }>(
+      `/api/system/global-documents${buildQueryString({ status })}`,
+      { actorId },
+    ),
+
+  getGlobalDocument: async (actorId: string, documentId: string) =>
+    request<{ document: GlobalDocument }>(
+      `/api/system/global-documents/${encodeURIComponent(documentId)}`,
+      { actorId },
+    ),
+
+  createGlobalDocument: async (
+    actorId: string,
+    payload: {
+      slug?: string;
+      title: string;
+      description?: string;
+      contentMd: string;
+      status: ProjectDocumentStatus;
+      sortOrder: number;
+      isEntry: boolean;
+    },
+  ) =>
+    request<{ document: GlobalDocument }>(`/api/system/global-documents`, {
+      method: 'POST',
+      actorId,
+      body: payload,
+    }),
+
+  updateGlobalDocument: async (
+    actorId: string,
+    documentId: string,
+    payload: {
+      slug?: string;
+      title: string;
+      description?: string;
+      contentMd: string;
+      status: ProjectDocumentStatus;
+      sortOrder: number;
+      isEntry: boolean;
+    },
+  ) =>
+    request<{ document: GlobalDocument }>(
+      `/api/system/global-documents/${encodeURIComponent(documentId)}`,
+      {
+        method: 'PUT',
+        actorId,
+        body: payload,
+      },
+    ),
+
+  deleteGlobalDocument: async (actorId: string, documentId: string) =>
+    request<void>(`/api/system/global-documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+      actorId,
+    }),
+
   getDatabaseTableData: async (
     actorId: string,
     params: { schema: string; table: string; page?: number; pageSize?: number },
@@ -211,6 +277,70 @@ export const api = {
 
   getMembers: async (actorId: string, projectId: string) =>
     request<{ admins: ProjectMember[]; members: ProjectMember[] }>(`/api/projects/${projectId}/members`, {
+      actorId,
+    }),
+
+  listProjectDocuments: async (
+    actorId: string,
+    projectId: string,
+    status: 'all' | ProjectDocumentStatus = 'all',
+  ) =>
+    request<{ documents: ProjectDocumentListItem[] }>(
+      `/api/projects/${projectId}/documents${buildQueryString({ status })}`,
+      { actorId },
+    ),
+
+  getProjectDocument: async (actorId: string, projectId: string, documentId: string) =>
+    request<{ document: ProjectDocument }>(
+      `/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}`,
+      { actorId },
+    ),
+
+  createProjectDocument: async (
+    actorId: string,
+    projectId: string,
+    payload: {
+      slug?: string;
+      title: string;
+      description?: string;
+      contentMd: string;
+      status: ProjectDocumentStatus;
+      sortOrder: number;
+      isEntry: boolean;
+    },
+  ) =>
+    request<{ document: ProjectDocument }>(`/api/projects/${projectId}/documents`, {
+      method: 'POST',
+      actorId,
+      body: payload,
+    }),
+
+  updateProjectDocument: async (
+    actorId: string,
+    projectId: string,
+    documentId: string,
+    payload: {
+      slug?: string;
+      title: string;
+      description?: string;
+      contentMd: string;
+      status: ProjectDocumentStatus;
+      sortOrder: number;
+      isEntry: boolean;
+    },
+  ) =>
+    request<{ document: ProjectDocument }>(
+      `/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: 'PUT',
+        actorId,
+        body: payload,
+      },
+    ),
+
+  deleteProjectDocument: async (actorId: string, projectId: string, documentId: string) =>
+    request<void>(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
       actorId,
     }),
 

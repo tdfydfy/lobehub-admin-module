@@ -241,6 +241,68 @@ export type ProjectTemplate = {
   template_skill_count?: string | number;
 };
 
+export type ProjectDocumentStatus = 'draft' | 'published' | 'archived';
+
+export type ProjectDocumentListItem = {
+  id: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  status: ProjectDocumentStatus;
+  sortOrder: number;
+  isEntry: boolean;
+  excerpt: string;
+  contentLength: number;
+  updatedAt: string;
+};
+
+export type ProjectDocument = {
+  id: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  contentMd: string;
+  status: ProjectDocumentStatus;
+  sortOrder: number;
+  isEntry: boolean;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GlobalDocumentListItem = {
+  id: string;
+  scope: 'global';
+  slug: string;
+  title: string;
+  description: string | null;
+  status: ProjectDocumentStatus;
+  sortOrder: number;
+  isEntry: boolean;
+  excerpt: string;
+  contentLength: number;
+  updatedAt: string;
+};
+
+export type GlobalDocument = {
+  id: string;
+  scope: 'global';
+  slug: string;
+  title: string;
+  description: string | null;
+  contentMd: string;
+  status: ProjectDocumentStatus;
+  sortOrder: number;
+  isEntry: boolean;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AgentOption = {
   id: string;
   title: string | null;

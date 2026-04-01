@@ -6,10 +6,12 @@ import { corsOrigins, env } from './config.js';
 import { registerCustomerAnalysisRoutes } from './routes/customer-analysis.js';
 import { registerDailyReportRoutes } from './routes/daily-reports.js';
 import { registerDatabaseRoutes } from './routes/database.js';
+import { registerGlobalDocumentRoutes } from './routes/global-documents.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMobileRoutes } from './routes/mobile.js';
 import { registerOverviewRoutes } from './routes/overview.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
+import { registerProjectDocumentRoutes } from './routes/project-documents.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerSystemRoutes } from './routes/system.js';
@@ -72,6 +74,23 @@ export async function buildApp() {
   });
   const isAllowedOrigin = createAllowedOriginMatcher(corsOrigins);
 
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    const text = typeof body === 'string' ? body : body.toString();
+    const trimmed = text.trim();
+
+    if (!trimmed) {
+      done(null, {});
+      return;
+    }
+
+    try {
+      done(null, JSON.parse(trimmed));
+    } catch {
+      // Keep malformed JSON as raw text so routes can apply tolerant parsing
+      done(null, trimmed);
+    }
+  });
+
   await app.register(cors, {
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     origin: (origin, callback) => {
@@ -119,9 +138,11 @@ export async function buildApp() {
 
   await registerHealthRoutes(app);
   await registerSystemRoutes(app);
+  await registerGlobalDocumentRoutes(app);
   await registerDatabaseRoutes(app);
   await registerPortfolioRoutes(app);
   await registerProjectRoutes(app);
+  await registerProjectDocumentRoutes(app);
   await registerOverviewRoutes(app);
   await registerReportRoutes(app);
   await registerDailyReportRoutes(app);

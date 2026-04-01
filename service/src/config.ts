@@ -22,6 +22,9 @@ const envSchema = z.object({
   ADMIN_SESSION_SECURE_COOKIE: envBoolean.default(false),
   ALLOW_LEGACY_ACTOR_HEADER: envBoolean.default(false),
   TRUST_PROXY: envBoolean.default(false),
+  PROJECT_DOCS_INTERNAL_TOKEN: z.string().trim().optional(),
+  PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL: z.string().trim().optional(),
+  PROJECT_DOCS_PLUGIN_SECRET: z.string().trim().optional(),
   CORS_ORIGIN: z
     .string()
     .default('http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:4174,http://localhost:4174'),

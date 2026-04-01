@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { query } from './db.js';
+import { syncProjectDocumentPlugin } from './project-document-plugin.js';
 
 type ProvisionJobType = 'configure' | 'refresh';
 
@@ -465,6 +466,13 @@ async function runProvisionJob(jobId: string, log: Pick<FastifyBaseLogger, 'info
         skipped,
       ],
     );
+
+    try {
+      const pluginSync = await syncProjectDocumentPlugin(query as any, job.project_id);
+      log.info({ jobId, pluginSync }, 'Project document plugin sync completed after provision job');
+    } catch (pluginError) {
+      log.error({ jobId, error: pluginError }, 'Project document plugin sync failed after provision job');
+    }
 
     log.info({ jobId, total, success, failed, skipped }, 'Provision job completed');
   } catch (error) {

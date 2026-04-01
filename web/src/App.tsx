@@ -1,7 +1,9 @@
 ﻿import { DatabaseTablePanel } from './components/DatabaseTablePanel';
 import { Fragment, useEffect, useState } from 'react';
+import { GlobalDocumentsPanel } from './components/GlobalDocumentsPanel';
 import { ProjectCustomerAnalysisPanel } from './components/ProjectCustomerAnalysisPanel';
 import { ProjectDailyReportPanel } from './components/ProjectDailyReportPanel';
+import { ProjectDocumentsPanel } from './components/ProjectDocumentsPanel';
 import { ProjectOverviewPanel } from './components/ProjectOverviewPanel';
 import { ProjectPortfolioPanel } from './components/ProjectPortfolioPanel';
 import { formatTimeToShanghai } from './lib/time';
@@ -21,10 +23,10 @@ import type {
   UserOption,
 } from './types';
 
-type TabKey = 'overview' | 'members' | 'assistant' | 'data' | 'daily' | 'analysis' | 'topic' | 'browser';
+type TabKey = 'overview' | 'members' | 'assistant' | 'docs' | 'globalDocs' | 'data' | 'daily' | 'analysis' | 'topic' | 'browser';
 type PortalMode = 'system' | 'workspace' | 'member' | 'empty';
 type WorkbenchMode = 'system' | 'workspace' | 'member';
-type SystemPage = 'project-list' | 'project-create' | 'project-detail';
+type SystemPage = 'project-list' | 'project-create' | 'project-detail' | 'global-docs';
 
 function formatTime(value?: string | null) {
   return formatTimeToShanghai(value);
@@ -456,6 +458,14 @@ function ProjectWorkbench({
         <button className={selectedTab === 'assistant' ? 'active' : ''} onClick={() => setSelectedTab('assistant')}>
           助手配置
         </button>
+        <button className={selectedTab === 'docs' ? 'active' : ''} onClick={() => setSelectedTab('docs')}>
+          项目文档
+        </button>
+        {mode !== 'member' ? (
+          <button className={selectedTab === 'globalDocs' ? 'active' : ''} onClick={() => setSelectedTab('globalDocs')}>
+            全局知识
+          </button>
+        ) : null}
         <button className={selectedTab === 'browser' ? 'active' : ''} onClick={() => setSelectedTab('browser')}>
           数据查看
         </button>
@@ -793,6 +803,22 @@ function ProjectWorkbench({
         </div>
       ) : null}
 
+      {selectedTab === 'docs' ? (
+        <ProjectDocumentsPanel
+          actorId={actorId}
+          projectId={projectDetail.id}
+          onFeedback={setFeedback}
+        />
+      ) : null}
+
+      {selectedTab === 'globalDocs' && mode !== 'member' ? (
+        <GlobalDocumentsPanel
+          actorId={actorId}
+          editable={mode === 'system'}
+          onFeedback={setFeedback}
+        />
+      ) : null}
+
       {selectedTab === 'browser' ? (
         <DatabaseTablePanel
           actorId={actorId}
@@ -840,6 +866,7 @@ type SystemHeaderProps = {
   currentPage: SystemPage;
   projectCount: number;
   activeProjectName?: string;
+  onShowGlobalDocs: () => void;
   onShowProjectList: () => void;
   onShowCreatePage: () => void;
 };
@@ -848,6 +875,7 @@ function SystemHeader({
   currentPage,
   projectCount,
   activeProjectName,
+  onShowGlobalDocs,
   onShowProjectList,
   onShowCreatePage,
 }: SystemHeaderProps) {
@@ -867,6 +895,9 @@ function SystemHeader({
         </button>
         <button className={currentPage === 'project-create' ? 'active' : ''} onClick={onShowCreatePage}>
           New Project
+        </button>
+        <button className={currentPage === 'global-docs' ? 'active' : ''} onClick={onShowGlobalDocs}>
+          Global Docs
         </button>
         {currentPage === 'project-detail' && activeProjectName ? (
           <span className="system-badge">Current: {activeProjectName}</span>
@@ -1803,6 +1834,7 @@ export default function App() {
               currentPage={systemPage}
               projectCount={projects.length}
               activeProjectName={selectedProjectId ? selectedProjectName : undefined}
+              onShowGlobalDocs={() => setSystemPage('global-docs')}
               onShowProjectList={() => setSystemPage('project-list')}
               onShowCreatePage={() => setSystemPage('project-create')}
             />
@@ -1895,6 +1927,14 @@ export default function App() {
                   handleDeleteProject={handleDeleteProject}
                 />
               )
+            ) : null}
+
+            {systemPage === 'global-docs' ? (
+              <GlobalDocumentsPanel
+                actorId={actorId}
+                editable
+                onFeedback={setFeedback}
+              />
             ) : null}
           </section>
         </main>

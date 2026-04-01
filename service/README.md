@@ -47,6 +47,19 @@ ADMIN_SESSION_TTL_HOURS=12
 ADMIN_SESSION_SECURE_COOKIE=false
 ```
 
+如需启用项目文档内部知识接口，额外配置：
+
+```bash
+PROJECT_DOCS_INTERNAL_TOKEN=replace-with-a-long-random-string
+```
+
+如需启用项目文档共享知识插件，额外配置：
+
+```bash
+PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL=https://39.108.106.95/admin-api
+PROJECT_DOCS_PLUGIN_SECRET=replace-with-a-long-random-string
+```
+
 ## 已提供接口
 
 - `GET /health`
@@ -65,6 +78,16 @@ ADMIN_SESSION_SECURE_COOKIE=false
 - `GET /api/projects/:projectId/agents?adminUserId=...`
 - `GET /api/projects/:projectId/template`
 - `PUT /api/projects/:projectId/template`
+- `GET /api/system/global-documents`
+- `POST /api/system/global-documents`
+- `GET /api/system/global-documents/:documentId`
+- `PUT /api/system/global-documents/:documentId`
+- `DELETE /api/system/global-documents/:documentId`
+- `GET /api/projects/:projectId/documents`
+- `POST /api/projects/:projectId/documents`
+- `GET /api/projects/:projectId/documents/:documentId`
+- `PUT /api/projects/:projectId/documents/:documentId`
+- `DELETE /api/projects/:projectId/documents/:documentId`
 - `POST /api/projects/:projectId/provision`
 - `POST /api/projects/:projectId/provision/refresh`
 - `GET /api/projects/:projectId/jobs/:jobId`
@@ -73,3 +96,9 @@ ADMIN_SESSION_SECURE_COOKIE=false
 - `GET /api/projects/:projectId/reports/topic-stats`
 - `GET /api/projects/:projectId/reports/topic-stats/users/:userId/topics`
 - `GET /api/projects/:projectId/reports/topic-stats/topics/:topicId`
+- `GET /internal/project-docs/context?projectId=...`
+- `GET /internal/project-docs/search?projectId=...&query=...`
+- `GET /internal/project-docs/read?projectId=...&documentId=...`
+- `GET /public/project-knowledge/:projectId/:signature/manifest.json`
+- `POST /public/project-knowledge/:projectId/:signature/query`
+- `POST /public/project-knowledge/:projectId/:signature/context`

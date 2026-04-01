@@ -18,7 +18,9 @@ $sqlFiles = @(
   (Join-Path $resolvedSqlRoot "007_daily_report_volcengine_provider.sql"),
   (Join-Path $resolvedSqlRoot "008_customer_analysis_chat.sql"),
   (Join-Path $resolvedSqlRoot "009_customer_analysis_jobs.sql"),
-  (Join-Path $resolvedSqlRoot "010_project_topic_daily_facts.sql")
+  (Join-Path $resolvedSqlRoot "010_project_topic_daily_facts.sql"),
+  (Join-Path $resolvedSqlRoot "011_project_documents.sql"),
+  (Join-Path $resolvedSqlRoot "012_global_documents.sql")
 )
 
 foreach ($sqlFile in $sqlFiles) {

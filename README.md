@@ -2,6 +2,30 @@
 
 ## Update 2026-03-31
 
+- 新增“知识域”能力：
+  - 知识分为两层：
+    - `global_documents`
+    - `project_documents`
+  - 全局知识由系统管理员维护
+  - 项目知识由项目管理员维护
+  - 两个知识域都约定使用 `00-map` 作为知识地图文档
+- 新增“项目文档 / 全局知识文档”能力：
+  - 新增 `project_documents`
+  - 新增 `global_documents`
+  - 项目详情页新增“项目文档”标签
+  - 系统管理页新增 `Global Docs`
+  - 项目管理员可在项目详情页只读查看全局知识
+  - 支持项目管理员维护 Markdown 文档
+  - 管理端后端新增内部知识接口与共享知识插件接口
+  - 项目知识插件当前只暴露一个高层工具：
+    - `queryProjectKnowledge`
+  - 当前已实现“项目文档 -> 项目知识插件安装记录”自动同步
+  - 项目查询链路已支持：
+    - 项目知识优先
+    - 全局知识补充
+  - 已新增 `sql/011_project_documents.sql`
+  - 已新增 `sql/012_global_documents.sql`
+
 - 新增“项目经营事实层”与多项目看板能力：
   - 新增 `project_topic_daily_facts`
   - 新增 `project_daily_overview_view`
@@ -194,6 +218,7 @@
 - `sql/008_customer_analysis_chat.sql`：已部署环境补齐自由盘点会话与消息表
 - `sql/009_customer_analysis_jobs.sql`：已部署环境补齐自由盘点任务表，支持后台执行与轮询状态
 - `sql/010_project_topic_daily_facts.sql`：已部署环境补齐项目经营事实表与概览视图
+- `sql/011_project_documents.sql`：已部署环境补齐项目文档表与索引
 - `scripts/apply-project-admin-core.ps1`：安装核心 schema
 - `scripts/check-project-admin-mappings.ps1`：执行升级前映射健康检查
 - `scripts/upgrade-existing-project-admin.ps1`：执行已部署环境的增量升级
