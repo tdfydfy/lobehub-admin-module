@@ -7,8 +7,12 @@ import {
   syncProjectDocumentPlugin,
   verifyProjectKnowledgePluginSignature,
 } from '../project-document-plugin.js';
+import {
+  seedDefaultProjectDocumentsForZeroDocProjects,
+  seedMissingDefaultProjectDocuments,
+} from '../project-document-templates.js';
 import { z } from 'zod';
-import { ensureProjectAdminRequest } from '../auth.js';
+import { ensureProjectAdminRequest, ensureSystemAdmin, requireActor } from '../auth.js';
 import { env } from '../config.js';
 
 type ProjectDocumentStatus = 'draft' | 'published' | 'archived';
@@ -406,6 +410,20 @@ async function fetchProjectDocumentBySlug(projectId: string, slug: string) {
   );
 
   return result.rows[0] ?? null;
+}
+
+async function fetchProjectName(projectId: string) {
+  const result = await query<{ name: string }>(
+    `
+    select name
+    from lobehub_admin.projects
+    where id = $1
+    limit 1
+    `,
+    [projectId],
+  );
+
+  return result.rows[0]?.name ?? null;
 }
 
 async function fetchPublishedDocumentCount(projectId: string) {
@@ -940,6 +958,61 @@ export async function registerProjectDocumentRoutes(app: FastifyInstance) {
       await syncProjectDocumentPlugin(client, params.projectId);
       await client.query('commit');
       return reply.code(204).send();
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/api/projects/:projectId/documents/seed-defaults', async (request) => {
+    const params = z.object({
+      projectId: z.string().min(1),
+    }).parse(request.params);
+    const actor = await ensureProjectAdminRequest(request, params.projectId);
+    const client = await db.connect();
+
+    try {
+      const projectName = await fetchProjectName(params.projectId);
+
+      if (!projectName) {
+        throw createHttpError('Project not found', 404);
+      }
+
+      await client.query('begin');
+      const seed = await seedMissingDefaultProjectDocuments(client, params.projectId, projectName, actor.id);
+      const sync = await syncProjectDocumentPlugin(client, params.projectId);
+      await client.query('commit');
+
+      return {
+        projectId: params.projectId,
+        seededDocumentCount: seed.createdDocumentCount,
+        skipped: seed.skipped,
+        pluginSync: sync,
+      };
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/api/system/project-documents/seed-defaults', async (request) => {
+    const actor = await requireActor(request);
+    await ensureSystemAdmin(actor.id);
+    const client = await db.connect();
+
+    try {
+      await client.query('begin');
+      const seed = await seedDefaultProjectDocumentsForZeroDocProjects(client, actor.id);
+      await client.query('commit');
+
+      return {
+        affectedProjectCount: seed.affectedProjectCount,
+        createdDocumentCount: seed.createdDocumentCount,
+      };
     } catch (error) {
       await client.query('rollback');
       throw error;

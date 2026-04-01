@@ -24,6 +24,28 @@
   - 统一知识插件已安装到项目账号
   - 统一知识接口已可返回项目文档与全局文档结果
 
+## Update 2026-04-02
+
+- 新建项目时会自动生成默认项目文档模板包：
+  - `00-project-knowledge-map`
+  - `01-project-core-card`
+  - `02-product-and-pricing`
+  - `03-location-school-faq`
+  - `04-competitor-summary`
+  - `05-objection-handling`
+  - `06-project-dynamics`
+- 默认模板全部以 `draft` 创建，其中：
+  - `00-project-knowledge-map`
+  - `01-project-core-card`
+  会默认标记为入口文档
+- 项目文档页已新增“补齐默认模板”操作：
+  - 仅补缺失模板
+  - 不覆盖已有文档
+  - 不删除已有文档
+- 已有项目补齐策略：
+  - 零文档项目可批量补模板
+  - 非空项目按缺失模板补齐
+
 ## Update 2026-03-31
 
 - 新增“知识域”能力：

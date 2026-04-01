@@ -74,6 +74,7 @@ export function ProjectDocumentsPanel({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [seedingDefaults, setSeedingDefaults] = useState(false);
 
   async function loadDocuments(nextSelectedDocumentId?: string) {
     setLoadingList(true);
@@ -202,6 +203,24 @@ export function ProjectDocumentsPanel({
     setDraft(createEmptyDraft());
   }
 
+  async function handleSeedDefaults() {
+    setSeedingDefaults(true);
+
+    try {
+      const response = await api.seedDefaultProjectDocuments(actorId, projectId);
+      await loadDocuments(selectedDocumentId || '');
+      onFeedback(
+        response.seededDocumentCount > 0
+          ? `已补齐 ${response.seededDocumentCount} 篇默认项目模板`
+          : '当前项目默认模板已齐全，无需补齐',
+      );
+    } catch (error) {
+      onFeedback((error as Error).message || '补齐默认项目模板失败');
+    } finally {
+      setSeedingDefaults(false);
+    }
+  }
+
   return (
     <div className="documents-workbench">
       <section className="section documents-sidebar">
@@ -210,9 +229,14 @@ export function ProjectDocumentsPanel({
             <p className="eyebrow">Project Docs</p>
             <h3>项目文档</h3>
           </div>
-          <button className="secondary" type="button" onClick={handleCreateDraft}>
+          <div className="button-row">
+            <button className="ghost" type="button" onClick={handleSeedDefaults} disabled={seedingDefaults || saving || deleting}>
+              {seedingDefaults ? '补齐中...' : '补齐默认模板'}
+            </button>
+            <button className="secondary" type="button" onClick={handleCreateDraft}>
             新建文档
-          </button>
+            </button>
+          </div>
         </div>
 
         <label className="field">

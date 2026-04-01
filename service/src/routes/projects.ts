@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ensureProjectAdmin, ensureProjectMember, requireActor } from '../auth.js';
 import { db, query } from '../db.js';
+import { seedDefaultProjectDocuments } from '../project-document-templates.js';
 import {
   buildKnowledgePluginIdentifier,
   removeKnowledgePluginForUsers,
@@ -699,23 +700,33 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     const body = createProjectSchema.parse(request.body);
     const conflicts = await findProjectMembershipConflicts(query, body.adminUserIds);
     throwProjectMembershipConflicts(conflicts);
+    const client = await db.connect();
 
     try {
-      const result = await query<{ project_id: string }>(
+      await client.query('begin');
+
+      const result = await client.query<{ project_id: string }>(
         'select lobehub_admin.create_project($1, $2, $3, $4) as project_id',
         [body.name, body.description ?? null, actor.id, body.adminUserIds],
       );
 
       const projectId = result.rows[0]?.project_id;
+      let seededDocumentCount = 0;
 
       if (projectId) {
-        await syncProjectDocumentPlugin(query as any, projectId);
+        const seedResult = await seedDefaultProjectDocuments(client, projectId, body.name, actor.id);
+        seededDocumentCount = seedResult.createdDocumentCount;
+        await syncProjectDocumentPlugin(client, projectId);
       }
+
+      await client.query('commit');
 
       return reply.code(201).send({
         projectId,
+        seededDocumentCount,
       });
     } catch (error) {
+      await client.query('rollback');
       const message = (error as Error).message;
 
       if (message.includes('already bound to another project')) {
@@ -723,6 +734,8 @@ export async function registerProjectRoutes(app: FastifyInstance) {
       }
 
       throw error;
+    } finally {
+      client.release();
     }
   });
 

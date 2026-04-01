@@ -344,6 +344,25 @@ export const api = {
       actorId,
     }),
 
+  seedDefaultProjectDocuments: async (actorId: string, projectId: string) =>
+    request<{
+      projectId: string;
+      seededDocumentCount: number;
+      skipped: boolean;
+    }>(`/api/projects/${projectId}/documents/seed-defaults`, {
+      method: 'POST',
+      actorId,
+    }),
+
+  seedDefaultProjectDocumentsForZeroDocProjects: async (actorId: string) =>
+    request<{
+      affectedProjectCount: number;
+      createdDocumentCount: number;
+    }>(`/api/system/project-documents/seed-defaults`, {
+      method: 'POST',
+      actorId,
+    }),
+
   getProjectMemberAssistantDetail: async (
     actorId: string,
     projectId: string,
