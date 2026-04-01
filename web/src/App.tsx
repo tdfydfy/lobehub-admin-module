@@ -877,18 +877,24 @@ type SystemHeaderProps = {
   currentPage: SystemPage;
   projectCount: number;
   activeProjectName?: string;
+  currentProjectId?: string;
+  projects: ProjectSummary[];
   onShowGlobalDocs: () => void;
   onShowProjectList: () => void;
   onShowCreatePage: () => void;
+  onSwitchProject: (projectId: string) => void;
 };
 
 function SystemHeader({
   currentPage,
   projectCount,
   activeProjectName,
+  currentProjectId,
+  projects,
   onShowGlobalDocs,
   onShowProjectList,
   onShowCreatePage,
+  onSwitchProject,
 }: SystemHeaderProps) {
   return (
     <section className="section system-header">
@@ -911,7 +917,25 @@ function SystemHeader({
           Global Docs
         </button>
         {currentPage === 'project-detail' && activeProjectName ? (
-          <span className="system-badge">Current: {activeProjectName}</span>
+          projects.length > 1 ? (
+            <details className="system-switcher">
+              <summary className="system-badge system-badge-button">Current: {activeProjectName}</summary>
+              <div className="system-switcher-menu">
+                {projects.map((project) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    className={`system-switcher-item${currentProjectId === project.id ? ' active' : ''}`}
+                    onClick={() => onSwitchProject(project.id)}
+                  >
+                    {project.name}
+                  </button>
+                ))}
+              </div>
+            </details>
+          ) : (
+            <span className="system-badge">Current: {activeProjectName}</span>
+          )
         ) : null}
       </div>
     </section>
@@ -1845,9 +1869,12 @@ export default function App() {
               currentPage={systemPage}
               projectCount={projects.length}
               activeProjectName={selectedProjectId ? selectedProjectName : undefined}
+              currentProjectId={selectedProjectId || undefined}
+              projects={projects}
               onShowGlobalDocs={() => setSystemPage('global-docs')}
               onShowProjectList={() => setSystemPage('project-list')}
               onShowCreatePage={() => setSystemPage('project-create')}
+              onSwitchProject={openSystemProject}
             />
 
             {systemPage === 'project-list' ? (

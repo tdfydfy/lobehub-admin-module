@@ -24,6 +24,11 @@ function formatTime(value?: string | null) {
   return formatTimeToShanghai(value);
 }
 
+function buildListSummary(description?: string | null, excerpt?: string | null) {
+  const source = (description?.trim() || excerpt?.trim() || '暂无摘要').replace(/\s+/g, ' ');
+  return source.length > 30 ? `${source.slice(0, 30)}...` : source;
+}
+
 function createEmptyDraft(): DocumentDraft {
   return {
     slug: '',
@@ -254,8 +259,9 @@ export function GlobalDocumentsPanel({
                   </span>
                 </div>
                 <span className="member-subtext">{document.slug}</span>
-                {document.description ? <p>{document.description}</p> : null}
-                <p className="muted">{document.excerpt || '暂无摘要'}</p>
+                <p className="muted documents-list-summary">
+                  {buildListSummary(document.description, document.excerpt)}
+                </p>
                 <div className="documents-list-meta">
                   <span>{getStatusLabel(document.status)}</span>
                   <span>{document.contentLength} 字</span>
