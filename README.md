@@ -1,5 +1,19 @@
 # LobeHub Admin Module
 
+## Update 2026-04-03
+
+- 系统管理员头部恢复常驻项目卡：
+  - `project-list` / `project-create` / `global-docs` 页面继续显示当前项目卡
+  - 可直接在头部切换项目，并通过 `Enter Project` 进入详情页
+- 系统首页移除重复的 `Project List` 区块：
+  - `Portfolio` 保留为唯一项目入口
+  - 避免同屏重复出现项目列表与成员规模摘要
+- 部署状态已同步：
+  - `ali-temp` 已验证本次头部与项目入口调整
+  - `ali-2c2g` 已完成生产同步并返回最新静态资源
+- 发布说明：
+  - [docs/release-2026-04-03-admin-topbar-and-production-sync.md](/D:/lobe-hub2/lobehub-admin-module/docs/release-2026-04-03-admin-topbar-and-production-sync.md)
+
 ## Update 2026-04-01
 
 - 知识链路已从“按项目插件”收敛为“按账号唯一项目归属的统一知识插件”：

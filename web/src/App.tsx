@@ -863,15 +863,13 @@ function AccountContextCard({
   onLogout,
 }: AccountContextCardProps) {
   return (
-    <section className="section context-card">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">Account</p>
-          <h3>{actorContext.actor.displayName}</h3>
-        </div>
+    <section className="section context-card account-context-card">
+      <div className="account-context-main">
+        <p className="eyebrow">Account</p>
+        <h3>{actorContext.actor.displayName}</h3>
+        <p className="muted account-context-email">{actorContext.actor.email ?? actorContext.actor.id}</p>
       </div>
-      <p className="muted">{actorContext.actor.email ?? actorContext.actor.id}</p>
-      <div className="project-context-meta">
+      <div className="account-context-footer">
         <span className="project-context-pill">
           {actorContext.isSystemAdmin
             ? '系统管理员'
@@ -881,10 +879,8 @@ function AccountContextCard({
                 : '项目管理员'
               : '项目成员'}
         </span>
-      </div>
-      <div className="button-row">
-        <button className="ghost" onClick={() => void onLogout()}>
-          退出登录
+        <button className="ghost account-context-logout" onClick={() => void onLogout()}>
+          退出
         </button>
       </div>
     </section>
@@ -907,13 +903,10 @@ function SystemAdminSidebarCard({
   onShowCreatePage,
 }: SystemAdminSidebarCardProps) {
   return (
-    <section className="section context-card">
-      <div className="section-head">
-        <div>
-          <p className="eyebrow">System</p>
-          <h3>Project Administration</h3>
-        </div>
-        <span className="muted">Projects {projectCount}</span>
+    <section className="section context-card system-context-card">
+      <div className="system-context-head">
+        <p className="eyebrow">System</p>
+        <span className="muted system-context-count">Projects {projectCount}</span>
       </div>
 
       <div className="sidebar-nav">
@@ -933,75 +926,24 @@ function SystemAdminSidebarCard({
 
 type SystemProjectListPageProps = {
   actorId: string;
-  projects: ProjectSummary[];
   selectedProjectId: string;
-  onRefresh: () => Promise<{ ok: boolean; selectedProjectId: string }>;
   onOpenProject: (projectId: string) => void;
-  onShowCreatePage: () => void;
   onFeedback: (message: string) => void;
 };
 
 function SystemProjectListPage({
   actorId,
-  projects,
   selectedProjectId,
-  onRefresh,
   onOpenProject,
-  onShowCreatePage,
   onFeedback,
 }: SystemProjectListPageProps) {
   return (
-    <>
-      <ProjectPortfolioPanel
-        actorId={actorId}
-        selectedProjectId={selectedProjectId}
-        onOpenProject={onOpenProject}
-        onFeedback={onFeedback}
-      />
-
-      <section className="section">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Projects</p>
-            <h2>Project List</h2>
-          </div>
-          <div className="button-row">
-            <button className="ghost" onClick={() => void onRefresh()}>
-              Refresh
-            </button>
-            <button className="primary" onClick={onShowCreatePage}>
-              New Project
-            </button>
-          </div>
-        </div>
-
-        {projects.length > 0 ? (
-          <div className="project-grid">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                className={`project-card${selectedProjectId === project.id ? ' active' : ''}`}
-                onClick={() => onOpenProject(project.id)}
-              >
-                <div>
-                  <strong>{project.name}</strong>
-                  <p>{project.description || 'No description'}</p>
-                </div>
-                <div className="project-meta">
-                  <span>Admins {project.adminCount}</span>
-                  <span>Members {project.memberCount}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-card">
-            <p>No projects yet.</p>
-            <p>Create the first project from the new project page.</p>
-          </div>
-        )}
-      </section>
-    </>
+    <ProjectPortfolioPanel
+      actorId={actorId}
+      selectedProjectId={selectedProjectId}
+      onOpenProject={onOpenProject}
+      onFeedback={onFeedback}
+    />
   );
 }
 
@@ -1095,42 +1037,39 @@ function SystemProjectCreatePage({
 
 type ProjectContextStripProps = {
   projectDetail: ProjectSummary;
-  roleLabel: string;
   onDeleteProject?: () => Promise<void>;
   projectOptions?: NormalizedProject[];
   selectedProjectId?: string;
   onSelectProject?: (projectId: string) => void;
+  onOpenProject?: () => void;
+  compact?: boolean;
 };
 
 function ProjectContextStrip({
   projectDetail,
-  roleLabel,
   onDeleteProject,
   projectOptions,
   selectedProjectId,
   onSelectProject,
+  onOpenProject,
+  compact = false,
 }: ProjectContextStripProps) {
   const canSwitchProject = Boolean(projectOptions && projectOptions.length > 1 && onSelectProject && selectedProjectId);
   const adminCount = projectDetail.adminCount ?? Number(projectDetail.admin_count ?? 0);
   const memberCount = projectDetail.memberCount ?? Number(projectDetail.member_count ?? 0);
   const updatedAt = projectDetail.updatedAt ?? projectDetail.updated_at ?? '';
+  const projectDescription = projectDetail.description?.trim() ?? '';
 
   return (
-    <section className="section context-card project-context-card">
-      <div className="section-head compact">
+    <section className={`section context-card project-context-card${compact ? ' compact' : ''}`}>
+      <div className="project-context-top">
         <div>
           <p className="eyebrow">Project</p>
+          <h3>{projectDetail.name}</h3>
         </div>
-        {onDeleteProject ? (
-          <button className="ghost project-context-delete" onClick={() => void onDeleteProject()}>
-            删除
-          </button>
-        ) : null}
-      </div>
-
-      <div className="project-context-actions">
         {canSwitchProject ? (
           <label className="field project-context-select compact">
+            <span>Switch Project</span>
             <select value={selectedProjectId} onChange={(event) => onSelectProject?.(event.target.value)}>
               {projectOptions?.map((project) => (
                 <option key={project.id} value={project.id}>
@@ -1140,14 +1079,31 @@ function ProjectContextStrip({
             </select>
           </label>
         ) : null}
-
-        <div className="project-context-meta">
-          <span className="project-context-pill">{roleLabel}</span>
-          <span className="project-context-pill">管理员 {adminCount}</span>
-          <span className="project-context-pill">成员 {memberCount}</span>
-          <span className="project-context-pill">更新 {formatTime(updatedAt)}</span>
-        </div>
       </div>
+
+      {!compact && projectDescription ? (
+        <p className="project-context-description muted">{projectDescription}</p>
+      ) : null}
+
+      <div className="project-context-meta">
+        <span className="project-context-pill">Admins {adminCount} / Members {memberCount}</span>
+        <span className="project-context-pill">Updated {formatTime(updatedAt)}</span>
+      </div>
+
+      {onDeleteProject || onOpenProject ? (
+        <div className="project-context-footer">
+          {onOpenProject ? (
+            <button className="secondary" onClick={onOpenProject}>
+              Enter Project
+            </button>
+          ) : null}
+          {onDeleteProject ? (
+            <button className="ghost project-context-delete" onClick={() => void onDeleteProject()}>
+            删除当前项目
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1266,15 +1222,12 @@ export default function App() {
 
         const normalizedProjects = projectsResult.projects.map(normalizeProject);
         const savedProjectId = window.localStorage.getItem('lobehub-admin-last-project-id');
+        const nextSelectedProjectId = savedProjectId && normalizedProjects.some((project) => project.id === savedProjectId)
+          ? savedProjectId
+          : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId);
         setActorContext(contextResult);
         setProjects(normalizedProjects);
-        setSelectedProjectId(
-          contextResult.isSystemAdmin
-            ? ''
-            : savedProjectId && normalizedProjects.some((project) => project.id === savedProjectId)
-              ? savedProjectId
-              : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId),
-        );
+        setSelectedProjectId(nextSelectedProjectId);
         setFeedback(getAccessFeedback(contextResult, normalizedProjects));
       } catch (error) {
         if (cancelled) return;
@@ -1303,6 +1256,7 @@ export default function App() {
 
   useEffect(() => {
     if (!actorContext || !selectedProjectId || !actorId || !selectedProjectRole) return;
+    if (actorContext.isSystemAdmin && systemPage !== 'project-detail') return;
 
     let cancelled = false;
 
@@ -1362,7 +1316,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [actorContext, actorId, selectedProjectId, selectedProjectRole, projectReloadKey]);
+  }, [actorContext, actorId, selectedProjectId, selectedProjectRole, projectReloadKey, systemPage]);
 
   useEffect(() => {
     if (!actorId || !selectedProjectId || !templateAdminId) {
@@ -1472,6 +1426,10 @@ export default function App() {
     setSelectedProjectId(projectId);
   }
 
+  function selectSystemProject(projectId: string) {
+    setSelectedProjectId(projectId);
+  }
+
   function openSystemProject(projectId: string) {
     setSelectedTab('overview');
     beginProjectSwitch(projectId);
@@ -1492,10 +1450,11 @@ export default function App() {
       ]);
 
       const normalizedProjects = projectsResult.projects.map(normalizeProject);
+      const savedProjectId = window.localStorage.getItem('lobehub-admin-last-project-id');
       const nextSelectedProjectId = selectedProjectId && normalizedProjects.some((project) => project.id === selectedProjectId)
         ? selectedProjectId
-        : contextResult.isSystemAdmin
-          ? ''
+        : savedProjectId && normalizedProjects.some((project) => project.id === savedProjectId)
+          ? savedProjectId
           : getPreferredProjectId(normalizedProjects, contextResult.activeProjectId);
 
       setActorContext(contextResult);
@@ -1757,6 +1716,9 @@ export default function App() {
       ?? (hasSelectedProjectDetail ? projectDetail.name : 'No project selected')
     )
     : 'No project selected';
+  const selectedProjectSummary = selectedProjectId
+    ? (projects.find((project) => project.id === selectedProjectId) ?? null)
+    : null;
   const hasStaleProjectDetail = Boolean(projectDetail && projectDetail.id !== selectedProjectId);
   const provisionBusy = provisionSubmitting || (Boolean(latestJobId) && (!job || ['pending', 'running'].includes(job.status)));
   const statusTarget = portalMode === 'system'
@@ -1768,6 +1730,17 @@ export default function App() {
     : selectedProjectName;
   const isProjectBundleLoading = Boolean(selectedProjectId)
     && (loadingDetail || hasStaleProjectDetail);
+  const showSystemAdminCard = Boolean(actorContext && portalMode === 'system');
+  const topbarProjectDetail = hasSelectedProjectDetail ? projectDetail : selectedProjectSummary;
+  const showProjectContextCard = Boolean(actorContext && selectedProjectId && topbarProjectDetail);
+  const topbarProjectCompact = portalMode === 'system' && systemPage !== 'project-detail';
+  const topbarCardLayout = showSystemAdminCard && showProjectContextCard
+    ? 'system-detail'
+    : showSystemAdminCard
+      ? 'system'
+      : showProjectContextCard
+        ? 'project'
+        : 'account';
 
   return (
     <div className="app-shell">
@@ -1813,9 +1786,9 @@ export default function App() {
               </div>
             </div>
           ) : actorContext ? (
-            <div className="topbar-card-row">
+            <div className="topbar-card-row" data-layout={topbarCardLayout}>
               <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
-              {portalMode === 'system' ? (
+              {showSystemAdminCard ? (
                 <SystemAdminSidebarCard
                   currentPage={systemPage}
                   projectCount={projects.length}
@@ -1824,14 +1797,15 @@ export default function App() {
                   onShowCreatePage={() => setSystemPage('project-create')}
                 />
               ) : null}
-              {selectedProjectId && projectDetail ? (
+              {topbarProjectDetail ? (
                 <ProjectContextStrip
-                  projectDetail={projectDetail}
-                  roleLabel={portalMode === 'system' ? '系统管理员视角' : portalMode === 'workspace' ? '项目管理员' : '项目成员'}
+                  projectDetail={topbarProjectDetail}
                   projectOptions={portalMode === 'system' ? projects : undefined}
                   selectedProjectId={portalMode === 'system' ? selectedProjectId : undefined}
-                  onSelectProject={portalMode === 'system' ? openSystemProject : undefined}
-                  onDeleteProject={portalMode === 'system' ? handleDeleteProject : undefined}
+                  onSelectProject={portalMode === 'system' ? (topbarProjectCompact ? selectSystemProject : openSystemProject) : undefined}
+                  onOpenProject={portalMode === 'system' && topbarProjectCompact && selectedProjectId ? () => openSystemProject(selectedProjectId) : undefined}
+                  onDeleteProject={portalMode === 'system' && systemPage === 'project-detail' && hasSelectedProjectDetail ? handleDeleteProject : undefined}
+                  compact={topbarProjectCompact}
                 />
               ) : null}
             </div>
@@ -1864,11 +1838,8 @@ export default function App() {
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
                 actorId={actorId}
-                projects={projects}
                 selectedProjectId={selectedProjectId}
-                onRefresh={refreshAccessBundle}
                 onOpenProject={openSystemProject}
-                onShowCreatePage={() => setSystemPage('project-create')}
                 onFeedback={setFeedback}
               />
             ) : null}
