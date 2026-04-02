@@ -207,6 +207,13 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
 .context-card {
   padding: 16px 18px;
 }
+.context-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 320px));
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 18px;
+}
 .project-context-strip,
 .project-context-card {
   display: flex;
@@ -1193,6 +1200,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 1080px) {
   .workspace, .detail-grid, .documents-workbench { grid-template-columns: 1fr; }
   .topbar, .hero-card, .statusbar, .topbar-main { flex-direction: column; }
+  .context-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-context-strip, .project-context-actions { flex-direction: column; align-items: flex-start; }
   .project-context-meta { justify-content: flex-start; }
   .hero-side { align-items: flex-start; }
@@ -1219,6 +1227,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 640px) {
   .app-shell { width: min(100vw - 20px, 1440px); padding-top: 12px; }
   .search-row, .button-row, .tabs, .actor-row { flex-direction: column; }
+  .context-row { grid-template-columns: 1fr; }
   .project-context-select { width: 100%; }
   .actor-session-card { flex-direction: column; align-items: flex-start; }
   .member-row { flex-direction: column; }
