@@ -344,7 +344,6 @@ type WorkbenchProps = {
   job: JobDetail | null;
   jobItems: JobItem[];
   setFeedback: (value: string) => void;
-  handleDeleteProject?: () => Promise<void>;
 };
 
 function ProjectWorkbench({
@@ -382,7 +381,6 @@ function ProjectWorkbench({
   job,
   jobItems,
   setFeedback,
-  handleDeleteProject,
 }: WorkbenchProps) {
   const rows = [...admins, ...members];
   const hasCurrentAgentSelection = agents.some((agent) => agent.id === selectedAgentId);
@@ -440,12 +438,6 @@ function ProjectWorkbench({
 
   return (
     <>
-      <ProjectContextStrip
-        projectDetail={projectDetail}
-        roleLabel={mode === 'system' ? '系统管理员视角' : '项目管理员'}
-        onDeleteProject={handleDeleteProject}
-      />
-
       <div className="tabs">
         <button className={selectedTab === 'overview' ? 'active' : ''} onClick={() => setSelectedTab('overview')}>
           项目概览
@@ -861,32 +853,62 @@ function ProjectWorkbench({
   );
 }
 
-type SystemHeaderProps = {
+type AccountContextCardProps = {
+  actorContext: ActorContext;
+  onLogout: () => Promise<void>;
+};
+
+function AccountContextCard({
+  actorContext,
+  onLogout,
+}: AccountContextCardProps) {
+  return (
+    <section className="section context-card">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Account</p>
+          <h3>{actorContext.actor.displayName}</h3>
+        </div>
+      </div>
+      <p className="muted">{actorContext.actor.email ?? actorContext.actor.id}</p>
+      <div className="project-context-meta">
+        <span className="project-context-pill">
+          {actorContext.isSystemAdmin
+            ? '系统管理员'
+            : actorContext.managedProjectCount > 0
+              ? actorContext.joinedProjectCount > actorContext.managedProjectCount
+                ? `管理 ${actorContext.managedProjectCount} / 参与 ${actorContext.joinedProjectCount}`
+                : '项目管理员'
+              : '项目成员'}
+        </span>
+      </div>
+      <div className="button-row">
+        <button className="ghost" onClick={() => void onLogout()}>
+          退出登录
+        </button>
+      </div>
+    </section>
+  );
+}
+
+type SystemAdminSidebarCardProps = {
   currentPage: SystemPage;
   projectCount: number;
-  activeProjectName?: string;
-  currentProjectId?: string;
-  projects: ProjectSummary[];
   onShowGlobalDocs: () => void;
   onShowProjectList: () => void;
   onShowCreatePage: () => void;
-  onSwitchProject: (projectId: string) => void;
 };
 
-function SystemHeader({
+function SystemAdminSidebarCard({
   currentPage,
   projectCount,
-  activeProjectName,
-  currentProjectId,
-  projects,
   onShowGlobalDocs,
   onShowProjectList,
   onShowCreatePage,
-  onSwitchProject,
-}: SystemHeaderProps) {
+}: SystemAdminSidebarCardProps) {
   return (
-    <div className="topbar-context topbar-context-system">
-      <div className="topbar-context-head">
+    <section className="section context-card">
+      <div className="section-head">
         <div>
           <p className="eyebrow">System</p>
           <h3>Project Administration</h3>
@@ -894,39 +916,18 @@ function SystemHeader({
         <span className="muted">Projects {projectCount}</span>
       </div>
 
-      <div className="tabs system-tabs">
+      <div className="sidebar-nav">
         <button className={currentPage === 'project-list' ? 'active' : ''} onClick={onShowProjectList}>
-          Project List
+          项目列表
         </button>
         <button className={currentPage === 'project-create' ? 'active' : ''} onClick={onShowCreatePage}>
-          New Project
+          新建项目
         </button>
         <button className={currentPage === 'global-docs' ? 'active' : ''} onClick={onShowGlobalDocs}>
-          Global Docs
+          全局文档
         </button>
-        {currentPage === 'project-detail' && activeProjectName ? (
-          projects.length > 1 ? (
-            <details className="system-switcher">
-              <summary className="system-badge system-badge-button">Current: {activeProjectName}</summary>
-              <div className="system-switcher-menu">
-                {projects.map((project) => (
-                  <button
-                    key={project.id}
-                    type="button"
-                    className={`system-switcher-item${currentProjectId === project.id ? ' active' : ''}`}
-                    onClick={() => onSwitchProject(project.id)}
-                  >
-                    {project.name}
-                  </button>
-                ))}
-              </div>
-            </details>
-          ) : (
-            <span className="system-badge">Current: {activeProjectName}</span>
-          )
-        ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1115,7 +1116,7 @@ function ProjectContextStrip({
   const updatedAt = projectDetail.updatedAt ?? projectDetail.updated_at ?? '';
 
   return (
-    <section className="project-context-strip">
+    <section className="section context-card project-context-card">
       <div className="project-context-main">
         <p className="eyebrow">Project</p>
         <h2>{projectDetail.name}</h2>
@@ -1158,9 +1159,6 @@ function ProjectContextStrip({
 type MemberProjectWorkspaceProps = {
   actorId: string;
   projectDetail: NormalizedProject;
-  projects: NormalizedProject[];
-  selectedProjectId: string;
-  setSelectedProjectId: (value: string) => void;
   loadingDetail: boolean;
   onFeedback: (value: string) => void;
 };
@@ -1168,32 +1166,11 @@ type MemberProjectWorkspaceProps = {
 function MemberProjectWorkspace({
   actorId,
   projectDetail,
-  projects,
-  selectedProjectId,
-  setSelectedProjectId,
   loadingDetail,
   onFeedback,
 }: MemberProjectWorkspaceProps) {
   return (
     <>
-      <ProjectContextStrip
-        projectDetail={projectDetail}
-        roleLabel="项目成员"
-        projectOptions={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={setSelectedProjectId}
-      />
-
-      <section className="section">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Access</p>
-            <h3>成员只读范围</h3>
-          </div>
-        </div>
-        <p className="muted">当前仅开放自己的托管 Topic 统计、Topic 清单和消息详情。</p>
-      </section>
-
       {loadingDetail ? <p className="muted">正在加载项目详情...</p> : null}
 
       {!loadingDetail ? (
@@ -1813,77 +1790,34 @@ export default function App() {
             </h1>
           </div>
 
-          <div className="actor-box actor-actions">
-            {!actorContext ? (
-              <>
-                <label>后台登录</label>
-                <div className="actor-row actor-login-row">
-                  <input
-                    value={actorInput}
-                    onChange={(event) => setActorInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void applyActor();
-                    }}
-                    placeholder="name@example.com"
-                  />
-                  <input
-                    type="password"
-                    value={passwordInput}
-                    onChange={(event) => setPasswordInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void applyActor();
-                    }}
-                    placeholder="请输入密码"
-                  />
-                  <button className="primary" onClick={() => void applyActor()}>
-                    登录
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="actor-session-card">
-                <div>
-                  <label>当前账户</label>
-                  <strong>{actorContext.actor.displayName}</strong>
-                  <span className="muted">{actorContext.actor.email ?? actorContext.actor.id}</span>
-                  <span className="muted">
-                    {actorContext.isSystemAdmin
-                      ? '系统管理员'
-                      : actorContext.managedProjectCount > 0
-                        ? actorContext.joinedProjectCount > actorContext.managedProjectCount
-                          ? `项目权限：管理 ${actorContext.managedProjectCount} / 参与 ${actorContext.joinedProjectCount}`
-                          : `项目管理员 · 管理项目 ${actorContext.managedProjectCount}`
-                        : `项目成员 · 参与项目 ${actorContext.joinedProjectCount}`}
-                  </span>
-                </div>
-                <button className="ghost" onClick={() => void clearActor()}>
-                  退出登录
+          {!actorContext ? (
+            <div className="actor-box actor-actions">
+              <label>后台登录</label>
+              <div className="actor-row actor-login-row">
+                <input
+                  value={actorInput}
+                  onChange={(event) => setActorInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void applyActor();
+                  }}
+                  placeholder="name@example.com"
+                />
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(event) => setPasswordInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void applyActor();
+                  }}
+                  placeholder="请输入密码"
+                />
+                <button className="primary" onClick={() => void applyActor()}>
+                  登录
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
-
-        {actorContext && !loadingAccess ? (
-          portalMode === 'system' ? (
-            <SystemHeader
-              currentPage={systemPage}
-              projectCount={projects.length}
-              activeProjectName={selectedProjectId ? selectedProjectName : undefined}
-              currentProjectId={selectedProjectId || undefined}
-              projects={projects}
-              onShowGlobalDocs={() => setSystemPage('global-docs')}
-              onShowProjectList={() => setSystemPage('project-list')}
-              onShowCreatePage={() => setSystemPage('project-create')}
-              onSwitchProject={openSystemProject}
-            />
-          ) : selectedProjectId && projectDetail ? (
-            <ProjectContextStrip
-              projectDetail={projectDetail}
-              roleLabel={portalMode === 'workspace' ? '项目管理员' : '项目成员'}
-            />
-          ) : null
-        ) : null}
       </header>
 
       {!actorId ? (
@@ -1906,7 +1840,30 @@ export default function App() {
           </section>
         </main>
       ) : portalMode === 'system' ? (
-        <main className="workspace workspace-single">
+        <main className="workspace">
+          <aside className="panel panel-left">
+            {actorContext ? (
+              <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
+            ) : null}
+            <SystemAdminSidebarCard
+              currentPage={systemPage}
+              projectCount={projects.length}
+              onShowGlobalDocs={() => setSystemPage('global-docs')}
+              onShowProjectList={() => setSystemPage('project-list')}
+              onShowCreatePage={() => setSystemPage('project-create')}
+            />
+            {systemPage === 'project-detail' && selectedProjectId && projectDetail ? (
+              <ProjectContextStrip
+                projectDetail={projectDetail}
+                roleLabel="系统管理员视角"
+                projectOptions={projects}
+                selectedProjectId={selectedProjectId}
+                onSelectProject={openSystemProject}
+                onDeleteProject={handleDeleteProject}
+              />
+            ) : null}
+          </aside>
+
           <section className="panel panel-main">
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
@@ -1993,7 +1950,6 @@ export default function App() {
                   job={job}
                   jobItems={jobItems}
                   setFeedback={setFeedback}
-                  handleDeleteProject={handleDeleteProject}
                 />
               )
             ) : null}
@@ -2136,13 +2092,24 @@ export default function App() {
                 job={job}
                 jobItems={jobItems}
                 setFeedback={setFeedback}
-                handleDeleteProject={handleDeleteProject}
               />
             )}
           </section>
         </main>
       ) : portalMode === 'workspace' ? (
-        <main className="workspace workspace-single">
+        <main className="workspace">
+          <aside className="panel panel-left">
+            {actorContext ? (
+              <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
+            ) : null}
+            {selectedProjectId && projectDetail ? (
+              <ProjectContextStrip
+                projectDetail={projectDetail}
+                roleLabel="项目管理员"
+              />
+            ) : null}
+          </aside>
+
           <section className="panel panel-main">
             {!selectedProjectId ? (
               <div className="empty-state">
@@ -2201,7 +2168,19 @@ export default function App() {
           </section>
         </main>
       ) : portalMode === 'member' ? (
-        <main className="workspace workspace-single">
+        <main className="workspace">
+          <aside className="panel panel-left">
+            {actorContext ? (
+              <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
+            ) : null}
+            {selectedProjectId && projectDetail ? (
+              <ProjectContextStrip
+                projectDetail={projectDetail}
+                roleLabel="项目成员"
+              />
+            ) : null}
+          </aside>
+
           <section className="panel panel-main">
             {!selectedProjectId ? (
               <div className="empty-state">
@@ -2223,9 +2202,6 @@ export default function App() {
               <MemberProjectWorkspace
                 actorId={actorId}
                 projectDetail={projectDetail!}
-                projects={projects}
-                selectedProjectId={selectedProjectId}
-                setSelectedProjectId={beginProjectSwitch}
                 loadingDetail={loadingDetail}
                 onFeedback={setFeedback}
               />

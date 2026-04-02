@@ -41,20 +41,6 @@ button { cursor: pointer; }
   gap: 24px;
   align-items: flex-start;
 }
-.topbar-context {
-  border-top: 1px solid rgba(52, 35, 20, 0.1);
-  padding-top: 14px;
-}
-.topbar-context-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-.topbar-context-head h3 {
-  margin: 0;
-}
 
 .topbar h1, .hero-card h2, .section h2, .section h3, .empty-state h2 {
   margin: 0; font-family: Georgia, "Noto Serif SC", serif; letter-spacing: 0.01em;
@@ -218,37 +204,36 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   position: relative;
   overflow: visible;
 }
-.project-context-strip {
+.context-card {
+  padding: 16px 18px;
+}
+.project-context-strip,
+.project-context-card {
   display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   align-items: flex-start;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
 }
 .project-context-main h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
 }
 .project-context-description {
   margin: 6px 0 0;
-  max-width: 720px;
+  max-width: 100%;
 }
 .project-context-actions {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 .project-context-meta {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 .project-context-pill {
   display: inline-flex;
@@ -261,8 +246,17 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   font-size: 12px;
 }
 .project-context-select {
-  width: 220px;
+  width: 100%;
   margin: 0;
+}
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-nav button {
+  width: 100%;
+  text-align: left;
 }
 .system-badge {
   display: inline-flex;
@@ -520,13 +514,9 @@ button.assistant-detail-trigger.active {
 }
 .actor-session-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.56);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
 }
 .actor-session-card strong {
   display: block;
