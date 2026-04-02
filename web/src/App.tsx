@@ -885,11 +885,11 @@ function SystemHeader({
   onSwitchProject,
 }: SystemHeaderProps) {
   return (
-    <section className="section system-header">
-      <div className="section-head">
+    <div className="topbar-context topbar-context-system">
+      <div className="topbar-context-head">
         <div>
           <p className="eyebrow">System</p>
-          <h2>Project Administration</h2>
+          <h3>Project Administration</h3>
         </div>
         <span className="muted">Projects {projectCount}</span>
       </div>
@@ -926,7 +926,7 @@ function SystemHeader({
           )
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -1799,68 +1799,91 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">LobeHub Admin Module</p>
-          <h1>
-            {actorContext?.isSystemAdmin
-              ? '系统管理员后台'
-              : portalMode === 'workspace'
-                ? '项目工作台'
-                : portalMode === 'member'
-                  ? '项目成员工作台'
-                  : '管理后台入口'}
-          </h1>
-        </div>
+        <div className="topbar-main">
+          <div>
+            <p className="eyebrow">LobeHub Admin Module</p>
+            <h1>
+              {actorContext?.isSystemAdmin
+                ? '系统管理员后台'
+                : portalMode === 'workspace'
+                  ? '项目工作台'
+                  : portalMode === 'member'
+                    ? '项目成员工作台'
+                    : '管理后台入口'}
+            </h1>
+          </div>
 
-        <div className="actor-box actor-actions">
-          {!actorContext ? (
-            <>
-              <label>后台登录</label>
-              <div className="actor-row actor-login-row">
-                <input
-                  value={actorInput}
-                  onChange={(event) => setActorInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void applyActor();
-                  }}
-                  placeholder="name@example.com"
-                />
-                <input
-                  type="password"
-                  value={passwordInput}
-                  onChange={(event) => setPasswordInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void applyActor();
-                  }}
-                  placeholder="请输入密码"
-                />
-                <button className="primary" onClick={() => void applyActor()}>
-                  登录
+          <div className="actor-box actor-actions">
+            {!actorContext ? (
+              <>
+                <label>后台登录</label>
+                <div className="actor-row actor-login-row">
+                  <input
+                    value={actorInput}
+                    onChange={(event) => setActorInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void applyActor();
+                    }}
+                    placeholder="name@example.com"
+                  />
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(event) => setPasswordInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void applyActor();
+                    }}
+                    placeholder="请输入密码"
+                  />
+                  <button className="primary" onClick={() => void applyActor()}>
+                    登录
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="actor-session-card">
+                <div>
+                  <label>当前账户</label>
+                  <strong>{actorContext.actor.displayName}</strong>
+                  <span className="muted">{actorContext.actor.email ?? actorContext.actor.id}</span>
+                  <span className="muted">
+                    {actorContext.isSystemAdmin
+                      ? '系统管理员'
+                      : actorContext.managedProjectCount > 0
+                        ? actorContext.joinedProjectCount > actorContext.managedProjectCount
+                          ? `项目权限：管理 ${actorContext.managedProjectCount} / 参与 ${actorContext.joinedProjectCount}`
+                          : `项目管理员 · 管理项目 ${actorContext.managedProjectCount}`
+                        : `项目成员 · 参与项目 ${actorContext.joinedProjectCount}`}
+                  </span>
+                </div>
+                <button className="ghost" onClick={() => void clearActor()}>
+                  退出登录
                 </button>
               </div>
-            </>
-          ) : (
-            <div className="actor-session-card">
-              <div>
-                <label>当前账户</label>
-                <strong>{actorContext.actor.displayName}</strong>
-                <span className="muted">{actorContext.actor.email ?? actorContext.actor.id}</span>
-                <span className="muted">
-                  {actorContext.isSystemAdmin
-                    ? '系统管理员'
-                    : actorContext.managedProjectCount > 0
-                      ? actorContext.joinedProjectCount > actorContext.managedProjectCount
-                        ? `项目权限：管理 ${actorContext.managedProjectCount} / 参与 ${actorContext.joinedProjectCount}`
-                        : `项目管理员 · 管理项目 ${actorContext.managedProjectCount}`
-                      : `项目成员 · 参与项目 ${actorContext.joinedProjectCount}`}
-                </span>
-              </div>
-              <button className="ghost" onClick={() => void clearActor()}>
-                退出登录
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
+        {actorContext && !loadingAccess ? (
+          portalMode === 'system' ? (
+            <SystemHeader
+              currentPage={systemPage}
+              projectCount={projects.length}
+              activeProjectName={selectedProjectId ? selectedProjectName : undefined}
+              currentProjectId={selectedProjectId || undefined}
+              projects={projects}
+              onShowGlobalDocs={() => setSystemPage('global-docs')}
+              onShowProjectList={() => setSystemPage('project-list')}
+              onShowCreatePage={() => setSystemPage('project-create')}
+              onSwitchProject={openSystemProject}
+            />
+          ) : selectedProjectId && projectDetail ? (
+            <ProjectContextStrip
+              projectDetail={projectDetail}
+              roleLabel={portalMode === 'workspace' ? '项目管理员' : '项目成员'}
+            />
+          ) : null
+        ) : null}
       </header>
 
       {!actorId ? (
@@ -1885,18 +1908,6 @@ export default function App() {
       ) : portalMode === 'system' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            <SystemHeader
-              currentPage={systemPage}
-              projectCount={projects.length}
-              activeProjectName={selectedProjectId ? selectedProjectName : undefined}
-              currentProjectId={selectedProjectId || undefined}
-              projects={projects}
-              onShowGlobalDocs={() => setSystemPage('global-docs')}
-              onShowProjectList={() => setSystemPage('project-list')}
-              onShowCreatePage={() => setSystemPage('project-create')}
-              onSwitchProject={openSystemProject}
-            />
-
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
                 actorId={actorId}
