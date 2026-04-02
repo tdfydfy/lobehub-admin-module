@@ -440,23 +440,11 @@ function ProjectWorkbench({
 
   return (
     <>
-      <div className="hero-card">
-        <div>
-          <p className="eyebrow">{mode === 'system' ? 'Project' : 'Workspace'}</p>
-          <h2>{projectDetail.name}</h2>
-          <p>{projectDetail.description || '暂无项目描述'}</p>
-        </div>
-        <div className="hero-side">
-          <span>管理员 {projectDetail.adminCount}</span>
-          <span>成员 {projectDetail.memberCount}</span>
-          <span>更新时间 {formatTime(projectDetail.updatedAt)}</span>
-          {handleDeleteProject ? (
-            <button className="danger" onClick={() => void handleDeleteProject()}>
-              删除项目
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <ProjectContextStrip
+        projectDetail={projectDetail}
+        roleLabel={mode === 'system' ? '系统管理员视角' : '项目管理员'}
+        onDeleteProject={handleDeleteProject}
+      />
 
       <div className="tabs">
         <button className={selectedTab === 'overview' ? 'active' : ''} onClick={() => setSelectedTab('overview')}>
@@ -1104,6 +1092,69 @@ function SystemProjectCreatePage({
   );
 }
 
+type ProjectContextStripProps = {
+  projectDetail: ProjectSummary;
+  roleLabel: string;
+  onDeleteProject?: () => Promise<void>;
+  projectOptions?: NormalizedProject[];
+  selectedProjectId?: string;
+  onSelectProject?: (projectId: string) => void;
+};
+
+function ProjectContextStrip({
+  projectDetail,
+  roleLabel,
+  onDeleteProject,
+  projectOptions,
+  selectedProjectId,
+  onSelectProject,
+}: ProjectContextStripProps) {
+  const canSwitchProject = Boolean(projectOptions && projectOptions.length > 1 && onSelectProject && selectedProjectId);
+  const adminCount = projectDetail.adminCount ?? Number(projectDetail.admin_count ?? 0);
+  const memberCount = projectDetail.memberCount ?? Number(projectDetail.member_count ?? 0);
+  const updatedAt = projectDetail.updatedAt ?? projectDetail.updated_at ?? '';
+
+  return (
+    <section className="project-context-strip">
+      <div className="project-context-main">
+        <p className="eyebrow">Project</p>
+        <h2>{projectDetail.name}</h2>
+        {projectDetail.description ? (
+          <p className="muted project-context-description">{projectDetail.description}</p>
+        ) : null}
+      </div>
+
+      <div className="project-context-actions">
+        {canSwitchProject ? (
+          <label className="field project-context-select">
+            <span>当前项目</span>
+            <select value={selectedProjectId} onChange={(event) => onSelectProject?.(event.target.value)}>
+              {projectOptions?.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <div className="project-context-meta">
+          <span className="project-context-pill">{roleLabel}</span>
+          <span className="project-context-pill">管理员 {adminCount}</span>
+          <span className="project-context-pill">成员 {memberCount}</span>
+          <span className="project-context-pill">更新 {formatTime(updatedAt)}</span>
+        </div>
+
+        {onDeleteProject ? (
+          <button className="danger" onClick={() => void onDeleteProject()}>
+            删除项目
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 type MemberProjectWorkspaceProps = {
   actorId: string;
   projectDetail: NormalizedProject;
@@ -1125,44 +1176,13 @@ function MemberProjectWorkspace({
 }: MemberProjectWorkspaceProps) {
   return (
     <>
-      <section className="section workspace-switcher">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Workspace</p>
-            <h2>我的项目</h2>
-          </div>
-          {projects.length > 1 ? <span className="muted">共 {projects.length} 个项目</span> : null}
-        </div>
-
-        {projects.length > 1 ? (
-          <label className="field">
-            <span>当前项目</span>
-            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)}>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <p className="muted">当前账号以项目成员身份进入工作台，仅开放自己的对话统计与详情查看。</p>
-        )}
-      </section>
-
-      <div className="hero-card">
-        <div>
-          <p className="eyebrow">Member Workspace</p>
-          <h2>{projectDetail.name}</h2>
-          <p>{projectDetail.description || '暂无项目描述'}</p>
-        </div>
-        <div className="hero-side">
-          <span>当前角色 项目成员</span>
-          <span>管理员 {projectDetail.adminCount}</span>
-          <span>成员 {projectDetail.memberCount}</span>
-          <span>更新时间 {formatTime(projectDetail.updatedAt)}</span>
-        </div>
-      </div>
+      <ProjectContextStrip
+        projectDetail={projectDetail}
+        roleLabel="项目成员"
+        projectOptions={projects}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={setSelectedProjectId}
+      />
 
       <section className="section">
         <div className="section-head">
@@ -2113,39 +2133,6 @@ export default function App() {
       ) : portalMode === 'workspace' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            <ProjectPortfolioPanel
-              actorId={actorId}
-              selectedProjectId={selectedProjectId}
-              onOpenProject={beginProjectSwitch}
-              onFeedback={setFeedback}
-            />
-            <section className="section workspace-switcher">
-              <div className="section-head">
-                <div>
-                  <p className="eyebrow">Workspace</p>
-                  <h2>我的项目</h2>
-                </div>
-                {projects.length > 1 ? <span className="muted">共 {projects.length} 个项目</span> : null}
-              </div>
-
-              {projects.length > 1 ? (
-                <label className="field">
-                  <span>当前项目</span>
-                  <select value={selectedProjectId} onChange={(event) => beginProjectSwitch(event.target.value)}>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <p className="muted">
-                  当前项目：{projects[0]?.name}，项目管理员后台不展示全局项目列表和新建项目入口。
-                </p>
-              )}
-            </section>
-
             {!selectedProjectId ? (
               <div className="empty-state">
                 <p className="eyebrow">Workspace</p>

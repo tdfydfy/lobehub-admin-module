@@ -190,12 +190,59 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   position: relative;
   z-index: 30;
   overflow: visible;
+  padding: 16px 20px;
 }
 .system-tabs {
   align-items: center;
   flex-wrap: wrap;
   position: relative;
   overflow: visible;
+}
+.project-context-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 250, 244, 0.86);
+  box-shadow: var(--shadow);
+}
+.project-context-main h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.project-context-description {
+  margin: 6px 0 0;
+  max-width: 720px;
+}
+.project-context-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.project-context-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.project-context-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 12px;
+}
+.project-context-select {
+  width: 220px;
+  margin: 0;
 }
 .system-badge {
   display: inline-flex;
@@ -1136,6 +1183,8 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 1080px) {
   .workspace, .detail-grid, .documents-workbench { grid-template-columns: 1fr; }
   .topbar, .hero-card, .statusbar { flex-direction: column; }
+  .project-context-strip, .project-context-actions { flex-direction: column; align-items: flex-start; }
+  .project-context-meta { justify-content: flex-start; }
   .hero-side { align-items: flex-start; }
   .actor-box { min-width: 0; }
   .member-form-grid { grid-template-columns: 1fr; }
@@ -1160,6 +1209,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 640px) {
   .app-shell { width: min(100vw - 20px, 1440px); padding-top: 12px; }
   .search-row, .button-row, .tabs, .actor-row { flex-direction: column; }
+  .project-context-select { width: 100%; }
   .actor-session-card { flex-direction: column; align-items: flex-start; }
   .member-row { flex-direction: column; }
   .member-side { width: 100%; align-items: flex-start; }
