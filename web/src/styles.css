@@ -31,7 +31,7 @@ button { cursor: pointer; }
 .topbar, .statusbar, .hero-card, .section, .empty-state, .project-card, .empty-card { backdrop-filter: blur(14px); box-shadow: var(--shadow); }
 
 .topbar {
-  display: flex; flex-direction: column; gap: 16px; padding: 20px 24px;
+  display: flex; gap: 24px; padding: 20px 24px;
   border: 1px solid var(--line); border-radius: 28px;
   background: linear-gradient(135deg, rgba(255, 249, 240, 0.94), rgba(245, 232, 210, 0.82));
 }
@@ -40,6 +40,14 @@ button { cursor: pointer; }
   justify-content: space-between;
   gap: 24px;
   align-items: flex-start;
+  width: 100%;
+}
+.topbar-card-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 220px));
+  gap: 12px;
+  align-items: stretch;
+  justify-content: flex-end;
 }
 
 .topbar h1, .hero-card h2, .section h2, .section h3, .empty-state h2 {
@@ -206,13 +214,11 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
 }
 .context-card {
   padding: 16px 18px;
-}
-.context-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 320px));
-  gap: 16px;
-  align-items: start;
-  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 220px;
+  min-height: 148px;
 }
 .project-context-strip,
 .project-context-card {
@@ -236,6 +242,11 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
   align-items: stretch;
   gap: 12px;
 }
+.project-context-delete {
+  align-self: flex-end;
+  padding: 6px 10px;
+  border-radius: 12px;
+}
 .project-context-meta {
   display: flex;
   gap: 8px;
@@ -255,6 +266,10 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
 .project-context-select {
   width: 100%;
   margin: 0;
+}
+.project-context-select.compact span,
+.section-head.compact .muted {
+  display: none;
 }
 .sidebar-nav {
   display: flex;
@@ -519,18 +534,8 @@ button.assistant-detail-trigger.active {
 .actor-login-row input {
   min-width: 0;
 }
-.actor-session-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-.actor-session-card strong {
-  display: block;
-}
-.actor-session-card .muted {
-  display: block;
-}
+.actor-session-card strong { display: block; }
+.actor-session-card .muted { display: block; }
 
 .member-page { display: flex; flex-direction: column; gap: 18px; }
 .report-page { display: flex; flex-direction: column; gap: 18px; }
@@ -1200,11 +1205,12 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 1080px) {
   .workspace, .detail-grid, .documents-workbench { grid-template-columns: 1fr; }
   .topbar, .hero-card, .statusbar, .topbar-main { flex-direction: column; }
-  .context-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-context-strip, .project-context-actions { flex-direction: column; align-items: flex-start; }
   .project-context-meta { justify-content: flex-start; }
   .hero-side { align-items: flex-start; }
   .actor-box { min-width: 0; }
+  .topbar-card-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .context-card { width: 100%; min-height: 0; }
   .member-form-grid { grid-template-columns: 1fr; }
   .assistant-detail-grid, .assistant-skill-list { grid-template-columns: 1fr; }
   .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .portfolio-stats-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1227,7 +1233,7 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
 @media (max-width: 640px) {
   .app-shell { width: min(100vw - 20px, 1440px); padding-top: 12px; }
   .search-row, .button-row, .tabs, .actor-row { flex-direction: column; }
-  .context-row { grid-template-columns: 1fr; }
+  .topbar-card-row { grid-template-columns: 1fr; }
   .project-context-select { width: 100%; }
   .actor-session-card { flex-direction: column; align-items: flex-start; }
   .member-row { flex-direction: column; }

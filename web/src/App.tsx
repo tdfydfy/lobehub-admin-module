@@ -1117,18 +1117,20 @@ function ProjectContextStrip({
 
   return (
     <section className="section context-card project-context-card">
-      <div className="project-context-main">
-        <p className="eyebrow">Project</p>
-        <h2>{projectDetail.name}</h2>
-        {projectDetail.description ? (
-          <p className="muted project-context-description">{projectDetail.description}</p>
+      <div className="section-head compact">
+        <div>
+          <p className="eyebrow">Project</p>
+        </div>
+        {onDeleteProject ? (
+          <button className="ghost project-context-delete" onClick={() => void onDeleteProject()}>
+            删除
+          </button>
         ) : null}
       </div>
 
       <div className="project-context-actions">
         {canSwitchProject ? (
-          <label className="field project-context-select">
-            <span>当前项目</span>
+          <label className="field project-context-select compact">
             <select value={selectedProjectId} onChange={(event) => onSelectProject?.(event.target.value)}>
               {projectOptions?.map((project) => (
                 <option key={project.id} value={project.id}>
@@ -1145,12 +1147,6 @@ function ProjectContextStrip({
           <span className="project-context-pill">成员 {memberCount}</span>
           <span className="project-context-pill">更新 {formatTime(updatedAt)}</span>
         </div>
-
-        {onDeleteProject ? (
-          <button className="danger" onClick={() => void onDeleteProject()}>
-            删除项目
-          </button>
-        ) : null}
       </div>
     </section>
   );
@@ -1816,6 +1812,29 @@ export default function App() {
                 </button>
               </div>
             </div>
+          ) : actorContext ? (
+            <div className="topbar-card-row">
+              <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
+              {portalMode === 'system' ? (
+                <SystemAdminSidebarCard
+                  currentPage={systemPage}
+                  projectCount={projects.length}
+                  onShowGlobalDocs={() => setSystemPage('global-docs')}
+                  onShowProjectList={() => setSystemPage('project-list')}
+                  onShowCreatePage={() => setSystemPage('project-create')}
+                />
+              ) : null}
+              {selectedProjectId && projectDetail ? (
+                <ProjectContextStrip
+                  projectDetail={projectDetail}
+                  roleLabel={portalMode === 'system' ? '系统管理员视角' : portalMode === 'workspace' ? '项目管理员' : '项目成员'}
+                  projectOptions={portalMode === 'system' ? projects : undefined}
+                  selectedProjectId={portalMode === 'system' ? selectedProjectId : undefined}
+                  onSelectProject={portalMode === 'system' ? openSystemProject : undefined}
+                  onDeleteProject={portalMode === 'system' ? handleDeleteProject : undefined}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
       </header>
@@ -1842,29 +1861,6 @@ export default function App() {
       ) : portalMode === 'system' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            <div className="context-row">
-              {actorContext ? (
-                <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
-              ) : null}
-              <SystemAdminSidebarCard
-                currentPage={systemPage}
-                projectCount={projects.length}
-                onShowGlobalDocs={() => setSystemPage('global-docs')}
-                onShowProjectList={() => setSystemPage('project-list')}
-                onShowCreatePage={() => setSystemPage('project-create')}
-              />
-              {systemPage === 'project-detail' && selectedProjectId && projectDetail ? (
-                <ProjectContextStrip
-                  projectDetail={projectDetail}
-                  roleLabel="系统管理员视角"
-                  projectOptions={projects}
-                  selectedProjectId={selectedProjectId}
-                  onSelectProject={openSystemProject}
-                  onDeleteProject={handleDeleteProject}
-                />
-              ) : null}
-            </div>
-
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
                 actorId={actorId}
@@ -2099,18 +2095,6 @@ export default function App() {
       ) : portalMode === 'workspace' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            <div className="context-row">
-              {actorContext ? (
-                <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
-              ) : null}
-              {selectedProjectId && projectDetail ? (
-                <ProjectContextStrip
-                  projectDetail={projectDetail}
-                  roleLabel="项目管理员"
-                />
-              ) : null}
-            </div>
-
             {!selectedProjectId ? (
               <div className="empty-state">
                 <p className="eyebrow">Workspace</p>
@@ -2170,18 +2154,6 @@ export default function App() {
       ) : portalMode === 'member' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
-            <div className="context-row">
-              {actorContext ? (
-                <AccountContextCard actorContext={actorContext} onLogout={clearActor} />
-              ) : null}
-              {selectedProjectId && projectDetail ? (
-                <ProjectContextStrip
-                  projectDetail={projectDetail}
-                  roleLabel="项目成员"
-                />
-              ) : null}
-            </div>
-
             {!selectedProjectId ? (
               <div className="empty-state">
                 <p className="eyebrow">Workspace</p>
