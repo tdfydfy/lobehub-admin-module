@@ -162,8 +162,6 @@ function mapSettingRow(row: DailyReportSettingRow | undefined, projectId: string
     systemPrompt: getDailyReportSystemPrompt(''),
     promptTemplate: row?.prompt_template ?? '',
     generateWhenNoVisit: row?.generate_when_no_visit ?? true,
-    modelProviderOverride: row?.model_provider_override ?? null,
-    modelNameOverride: row?.model_name_override ?? null,
     updatedBy: row?.updated_by ?? null,
     createdAt: row?.created_at ? toIsoTimestamp(row.created_at) : null,
     updatedAt: row?.updated_at ? toIsoTimestamp(row.updated_at) : null,
@@ -198,10 +196,9 @@ function getDailyReportSystemPrompt(customPrompt: string) {
 }
 
 function resolveExecutionSnapshot(setting: DailyReportSettingRecord): DailyReportExecutionSnapshot {
-  const modelProvider = setting.modelProviderOverride
-    ?? (env.DAILY_REPORT_DEFAULT_MODEL_PROVIDER ?? (env.VOLCENGINE_API_KEY ? 'volcengine' : 'fallback'));
-  const modelName = setting.modelNameOverride
-    ?? env.DAILY_REPORT_DEFAULT_MODEL_NAME
+  const modelProvider = env.DAILY_REPORT_DEFAULT_MODEL_PROVIDER
+    ?? (env.VOLCENGINE_API_KEY ? 'volcengine' : 'fallback');
+  const modelName = env.DAILY_REPORT_DEFAULT_MODEL_NAME
     ?? (modelProvider === 'volcengine' ? 'doubao-seed-2-0-lite-260215' : 'built-in-fallback');
 
   return {
@@ -246,8 +243,6 @@ export async function upsertProjectDailyReportSetting(
     businessDayCloseTimeLocal: string;
     promptTemplate: string;
     generateWhenNoVisit: boolean;
-    modelProviderOverride: 'volcengine' | 'fallback' | null;
-    modelNameOverride: string | null;
   },
 ) {
   await query(
@@ -263,15 +258,15 @@ export async function upsertProjectDailyReportSetting(
       model_name_override,
       updated_by
     )
-    values ($1, $2, $3, $4::time, $5, $6, $7, $8, $9)
+    values ($1, $2, $3, $4::time, $5, $6, null, null, $7)
     on conflict (project_id) do update
       set enabled = excluded.enabled,
           timezone = excluded.timezone,
           business_day_close_time_local = excluded.business_day_close_time_local,
           prompt_template = excluded.prompt_template,
           generate_when_no_visit = excluded.generate_when_no_visit,
-          model_provider_override = excluded.model_provider_override,
-          model_name_override = excluded.model_name_override,
+          model_provider_override = null,
+          model_name_override = null,
           updated_by = excluded.updated_by,
           updated_at = now()
     `,
@@ -282,8 +277,6 @@ export async function upsertProjectDailyReportSetting(
       input.businessDayCloseTimeLocal,
       input.promptTemplate,
       input.generateWhenNoVisit,
-      input.modelProviderOverride,
-      input.modelNameOverride,
       actorId,
     ],
   );

@@ -37,12 +37,6 @@ const settingBodySchema = z.object({
   businessDayCloseTimeLocal: z.string().trim().min(1),
   promptTemplate: z.string().default(''),
   generateWhenNoVisit: z.boolean().default(true),
-  modelProviderOverride: z.enum(['volcengine', 'fallback']).nullable().default(null),
-  modelNameOverride: z.preprocess((value) => {
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    return trimmed === '' ? null : trimmed;
-  }, z.string().trim().min(1).nullable()),
 });
 
 const runBodySchema = z.object({
@@ -77,8 +71,6 @@ export async function registerDailyReportRoutes(app: FastifyInstance) {
       businessDayCloseTimeLocal,
       promptTemplate: payload.promptTemplate,
       generateWhenNoVisit: payload.generateWhenNoVisit,
-      modelProviderOverride: payload.modelProviderOverride,
-      modelNameOverride: payload.modelNameOverride,
     });
 
     return { settings };

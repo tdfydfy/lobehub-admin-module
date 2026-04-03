@@ -3,7 +3,6 @@ import { api } from '../lib/api';
 import { formatTimeToShanghai } from '../lib/time';
 import type {
   DailyReportJob,
-  DailyReportModelProvider,
   ProjectDailyReportDetail,
   ProjectDailyReportListFilters,
   ProjectDailyReportListResult,
@@ -23,8 +22,6 @@ type SettingsDraft = {
   businessDayCloseTimeLocal: string;
   promptTemplate: string;
   generateWhenNoVisit: boolean;
-  modelProviderOverride: DailyReportModelProvider | '';
-  modelNameOverride: string;
 };
 
 type FilterState = {
@@ -45,8 +42,6 @@ function createDefaultSettingsDraft(): SettingsDraft {
     businessDayCloseTimeLocal: '22:00:00',
     promptTemplate: '',
     generateWhenNoVisit: true,
-    modelProviderOverride: '',
-    modelNameOverride: '',
   };
 }
 
@@ -66,8 +61,6 @@ function normalizeSettingsToDraft(settings: ProjectDailyReportSettings): Setting
     businessDayCloseTimeLocal: settings.businessDayCloseTimeLocal,
     promptTemplate: settings.promptTemplate,
     generateWhenNoVisit: settings.generateWhenNoVisit,
-    modelProviderOverride: settings.modelProviderOverride ?? '',
-    modelNameOverride: settings.modelNameOverride ?? '',
   };
 }
 
@@ -445,8 +438,6 @@ export function ProjectDailyReportPanel({
         businessDayCloseTimeLocal: settingsDraft.businessDayCloseTimeLocal.trim(),
         promptTemplate: settingsDraft.promptTemplate,
         generateWhenNoVisit: settingsDraft.generateWhenNoVisit,
-        modelProviderOverride: settingsDraft.modelProviderOverride || null,
-        modelNameOverride: settingsDraft.modelNameOverride.trim() || null,
       });
       setSettings(result.settings);
       setSettingsDraft(normalizeSettingsToDraft(result.settings));
@@ -513,12 +504,10 @@ export function ProjectDailyReportPanel({
             <label className="field"><span>启用自动日报</span><select value={settingsDraft.enabled ? 'enabled' : 'disabled'} onChange={(event) => setSettingsDraft((current) => ({ ...current, enabled: event.target.value === 'enabled' }))}><option value="enabled">启用</option><option value="disabled">停用</option></select></label>
             <label className="field"><span>时区</span><input value={settingsDraft.timezone} onChange={(event) => setSettingsDraft((current) => ({ ...current, timezone: event.target.value }))} placeholder="Asia/Shanghai" /></label>
             <label className="field"><span>营业日截止时间</span><input value={settingsDraft.businessDayCloseTimeLocal} onChange={(event) => setSettingsDraft((current) => ({ ...current, businessDayCloseTimeLocal: event.target.value }))} placeholder="22:00:00" /></label>
-            <label className="field"><span>模型提供商覆盖</span><select value={settingsDraft.modelProviderOverride} onChange={(event) => setSettingsDraft((current) => ({ ...current, modelProviderOverride: event.target.value as SettingsDraft['modelProviderOverride'] }))}><option value="">默认</option><option value="volcengine">volcengine</option><option value="fallback">fallback</option></select></label>
-          <label className="field"><span>模型名称覆盖</span><input value={settingsDraft.modelNameOverride} onChange={(event) => setSettingsDraft((current) => ({ ...current, modelNameOverride: event.target.value }))} placeholder="doubao-seed-2-0-lite-260215" /></label>
             <label className="field"><span>无来访也生成</span><select value={settingsDraft.generateWhenNoVisit ? 'yes' : 'no'} onChange={(event) => setSettingsDraft((current) => ({ ...current, generateWhenNoVisit: event.target.value === 'yes' }))}><option value="yes">是</option><option value="no">否</option></select></label>
           </div>
           <label className="field">
-            <span>?????</span>
+            <span>系统提示词</span>
             <textarea rows={6} value={settings?.systemPrompt ?? ""} readOnly />
           </label>
           <label className="field">

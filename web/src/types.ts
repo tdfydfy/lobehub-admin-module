@@ -567,8 +567,6 @@ export type ProjectTopicDetailResult = {
   messages: ProjectTopicMessage[];
 };
 
-export type DailyReportModelProvider = 'volcengine' | 'fallback';
-
 export type ProjectDailyReportSettings = {
   projectId: string;
   enabled: boolean;
@@ -577,8 +575,6 @@ export type ProjectDailyReportSettings = {
   systemPrompt: string;
   promptTemplate: string;
   generateWhenNoVisit: boolean;
-  modelProviderOverride: DailyReportModelProvider | null;
-  modelNameOverride: string | null;
   updatedBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;

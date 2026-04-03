@@ -18,8 +18,6 @@ export type DailyReportSettingRecord = {
   systemPrompt: string;
   promptTemplate: string;
   generateWhenNoVisit: boolean;
-  modelProviderOverride: 'volcengine' | 'fallback' | null;
-  modelNameOverride: string | null;
   updatedBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;

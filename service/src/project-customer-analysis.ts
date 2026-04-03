@@ -464,8 +464,8 @@ function getRecentUserMessages(messages: ProjectConversationMessage[]) {
 }
 
 function buildPromptInput(source: CustomerAnalysisSource): PromptInput {
-  const maxGroups = 48;
-  const maxMessagesPerGroup = 8;
+  const maxGroups = 24;
+  const maxMessagesPerGroup = 6;
   const groups = source.groups
     .map((group) => {
       const firstMessageAt = group.messages[0]?.createdAt ?? group.createdAt;
@@ -493,7 +493,7 @@ function buildPromptInput(source: CustomerAnalysisSource): PromptInput {
         recentMessages: group.messages.slice(-maxMessagesPerGroup).map((message) => ({
           id: message.id,
           role: message.role,
-          content: truncateText(message.content, 240),
+          content: truncateText(message.content, 200),
           createdAt: message.createdAt,
         })),
       } satisfies PromptGroup;
@@ -594,7 +594,7 @@ function buildFallbackAnalysisText(
     .join('\n');
 
   return [
-    `当前环境未配置可用的大模型，暂时无法对“${userPrompt.trim()}”做深度推理，以下返回基础盘客摘要。`,
+    `当前环境未配置可用的默认模型，暂时无法对“${userPrompt.trim()}”做深度推理，以下返回基础盘客摘要。`,
     '',
     `分析窗口：${source.range.label}`,
     `活跃销售：${source.metrics.activeMemberCount} 人`,
@@ -605,7 +605,7 @@ function buildFallbackAnalysisText(
     '最近活跃客户组：',
     latestGroups || '- 当前窗口内暂无有效客户组',
     '',
-    '如需按自定义口令获得完整推理结论，请配置可用的 volcengine 模型。',
+    '如需按自定义口令获得完整推理结论，请配置可用的默认模型。',
   ].join('\n');
 }
 
@@ -627,7 +627,7 @@ async function requestProjectCustomerAnalysis(
         modelProvider: modelConfig.provider,
         modelName: modelConfig.modelName,
         mode: 'fallback',
-        fallbackReason: 'Customer analysis model provider is set to fallback',
+        fallbackReason: 'Default model provider is set to fallback',
         ...promptInput.stats,
       },
     };
@@ -643,7 +643,7 @@ async function requestProjectCustomerAnalysis(
         modelProvider: 'fallback',
         modelName: 'built-in-fallback',
         mode: 'fallback',
-        fallbackReason: 'VOLCENGINE endpoint or API key is not configured',
+        fallbackReason: 'Default model endpoint or API key is not configured',
         ...promptInput.stats,
       },
     };

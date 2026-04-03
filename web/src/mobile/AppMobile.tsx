@@ -70,8 +70,6 @@ type DailySettingsDraft = {
   businessDayCloseTimeLocal: string;
   promptTemplate: string;
   generateWhenNoVisit: boolean;
-  modelProviderOverride: ProjectDailyReportSettings['modelProviderOverride'] | '';
-  modelNameOverride: string;
 };
 type BannerState = {
   message: string;
@@ -124,8 +122,6 @@ function createDefaultDailySettingsDraft(): DailySettingsDraft {
     businessDayCloseTimeLocal: '22:00:00',
     promptTemplate: '',
     generateWhenNoVisit: true,
-    modelProviderOverride: '',
-    modelNameOverride: '',
   };
 }
 
@@ -175,8 +171,6 @@ function normalizeSettingsToDraft(settings: ProjectDailyReportSettings): DailySe
     businessDayCloseTimeLocal: settings.businessDayCloseTimeLocal,
     promptTemplate: settings.promptTemplate,
     generateWhenNoVisit: settings.generateWhenNoVisit,
-    modelProviderOverride: settings.modelProviderOverride ?? '',
-    modelNameOverride: settings.modelNameOverride ?? '',
   };
 }
 
@@ -801,25 +795,6 @@ function DailySettingsSheet({
             <option value="yes">是</option>
             <option value="no">否</option>
           </select>
-        </label>
-        <label className="mobile-field">
-          <span>模型提供方覆盖</span>
-          <select
-            value={draft.modelProviderOverride ?? ''}
-            onChange={(event) => onChange({ modelProviderOverride: event.target.value as DailySettingsDraft['modelProviderOverride'] })}
-          >
-            <option value="">默认</option>
-            <option value="volcengine">volcengine</option>
-            <option value="fallback">fallback</option>
-          </select>
-        </label>
-        <label className="mobile-field">
-          <span>模型名称覆盖</span>
-          <input
-            value={draft.modelNameOverride}
-            onChange={(event) => onChange({ modelNameOverride: event.target.value })}
-            placeholder="doubao-seed-2-0-lite-260215"
-          />
         </label>
         <details className="mobile-details">
           <summary>系统提示词（只读）</summary>
@@ -2163,8 +2138,6 @@ function MobileDailyPage({
         businessDayCloseTimeLocal: settingsDraft.businessDayCloseTimeLocal.trim(),
         promptTemplate: settingsDraft.promptTemplate,
         generateWhenNoVisit: settingsDraft.generateWhenNoVisit,
-        modelProviderOverride: settingsDraft.modelProviderOverride || null,
-        modelNameOverride: settingsDraft.modelNameOverride.trim() || null,
       });
       setSettings(result.settings);
       setSettingsDraft(normalizeSettingsToDraft(result.settings));
