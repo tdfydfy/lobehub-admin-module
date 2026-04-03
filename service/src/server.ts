@@ -1,4 +1,5 @@
 import { env } from './config.js';
+import { startCrmSummarySyncScheduler, stopCrmSummarySyncScheduler } from './crm-summary-sync.js';
 import { resumePendingCustomerAnalysisJobs } from './customer-analysis-jobs.js';
 import { db } from './db.js';
 import { resumePendingDailyReportJobs, startDailyReportScheduler, stopDailyReportScheduler } from './daily-report-jobs.js';
@@ -10,9 +11,11 @@ await resumePendingProvisionJobs(app.log);
 await resumePendingDailyReportJobs(app.log);
 await resumePendingCustomerAnalysisJobs(app.log);
 startDailyReportScheduler(app.log);
+startCrmSummarySyncScheduler(app.log);
 
 const shutdown = async () => {
   stopDailyReportScheduler();
+  stopCrmSummarySyncScheduler();
   await app.close();
   await db.end();
   process.exit(0);

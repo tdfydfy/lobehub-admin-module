@@ -1,5 +1,20 @@
 # LobeHub Admin Module
 
+## Update 2026-04-03 CRM Summary Sync
+
+- 轻量 CRM 小结同步已升级为结构化 `v2`：
+  - 在原有消息驱动存档模式上新增 `gender / age / familyStructure / residenceArea / desiredLayout / targetUnitPrice / targetTotalPrice / firstVisitTime`
+  - 继续保留 `intentGrade / currentStage / summary`
+- `intentGrade` 现已统一要求为 `A / B / C / D / null`，不再把“高意向 / 中意向 / 中低意向”直接写入 JSON。
+- 后端新增称呼兜底推断：
+  - 当模型未填写 `gender`，但客户姓名中出现 `先生 / 女士 / 太太 / 小姐` 等称呼时，服务端会自动补全性别。
+- 客户小结正文上限已从 200 调整为 300 汉字。
+- 部署状态：
+  - `ali-temp` 已验证并回收真实问题
+  - `ali-2c2g` 已同步当前版本
+- 发布说明：
+  - [docs/release-2026-04-03-crm-summary-sync-field-expansion.md](/D:/claudecodefiles/lobehub-admin-module/docs/release-2026-04-03-crm-summary-sync-field-expansion.md)
+
 ## Update 2026-04-03
 
 - 系统管理员头部恢复常驻项目卡：

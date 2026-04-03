@@ -1,6 +1,30 @@
 # 项目状态总览
 
-更新时间：2026-04-01
+更新时间：2026-04-03
+
+## 0.5 2026-04-03 更新
+
+- 轻量 CRM 小结同步：
+  - 已新增 `service/src/crm-summary-sync.ts`
+  - 已接入服务启动调度与消息增量扫描
+  - 当前通过消息正文中的 `存档状态` 显示是否落库成功
+- CRM 小结字段已扩展：
+  - 基础字段已覆盖 `customer_name / gender / age / family_structure / living_area / contact_info`
+  - 本轮新增落库 `desired_layout / target_unit_price / target_total_price / first_visit_time`
+  - 结构化 payload 已升级到 `crm_customer_summary.v2`
+- 意向等级口径：
+  - 客户盘点 JSON 只允许 `A / B / C / D / null`
+  - 后端继续兼容历史 `v1` 与旧中文等级文本
+- 性别补全：
+  - 当模型未填写 `gender` 时，后端会根据 `customerName` 中的 `先生 / 女士 / 太太 / 小姐` 等称呼兜底推断
+  - 已对现有 CRM 表内可推断记录做一次补写
+- 提示词与知识库：
+  - 已统一更新 `customer-discuss-rules`
+  - 固定模板已要求输出新增字段
+  - 客户小结正文上限已调整为 300 汉字
+- 验证与部署状态：
+  - `ali-temp` 已完成问题定位、修复与字段烟测
+  - `ali-2c2g` 已同步当前版本
 
 ## 0.3 2026-04-01 更新
 

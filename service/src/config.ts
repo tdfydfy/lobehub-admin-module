@@ -17,6 +17,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3321),
   HOST: z.string().default('127.0.0.1'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
+  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
   ADMIN_SESSION_COOKIE_NAME: z.string().default('lobehub_admin_session'),
   ADMIN_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(12),
   ADMIN_SESSION_SECURE_COOKIE: envBoolean.default(false),
@@ -25,6 +27,11 @@ const envSchema = z.object({
   PROJECT_DOCS_INTERNAL_TOKEN: z.string().trim().optional(),
   PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL: z.string().trim().optional(),
   PROJECT_DOCS_PLUGIN_SECRET: z.string().trim().optional(),
+  CRM_SUMMARY_SYNC_ENABLED: envBoolean.default(true),
+  CRM_SUMMARY_SYNC_INTERVAL_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
+  CRM_SUMMARY_SYNC_BATCH_SIZE: z.coerce.number().int().min(1).max(200).default(50),
+  CRM_SUMMARY_SYNC_QUIET_PERIOD_MS: z.coerce.number().int().min(1_000).max(60_000).default(5_000),
+  CRM_SUMMARY_SYNC_INITIAL_LOOKBACK_MINUTES: z.coerce.number().int().min(0).max(24 * 60).default(10),
   CORS_ORIGIN: z
     .string()
     .default('http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:4174,http://localhost:4174'),
