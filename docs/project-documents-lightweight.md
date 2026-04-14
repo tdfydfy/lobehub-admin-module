@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-当前 `ali-temp` 已经落地以下知识结构：
+当前 `ali-2c2g` 已经落地以下知识结构：
 
 - 项目知识域：`lobehub_admin.project_documents`
 - 全局知识域：`lobehub_admin.global_documents`

@@ -590,10 +590,48 @@ export function ProjectDailyReportPanel({
           <>
             <div className="daily-report-detail">
               <div className="stats-grid report-stats-grid">
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '来访组数' : '来访客户'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'visitedGroupCount') : reportDetail.visitedCustomerCount}</strong><small className="stat-meta">营业日 {reportDetail.businessDate}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 3 ? '首访 / 复访' : schemaVersion >= 2 ? 'A/B 高意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 3 ? `${readNumber(summaryStats, 'firstVisitGroupCount')} / ${readNumber(summaryStats, 'revisitGroupCount')}` : schemaVersion >= 2 ? readNumber(summaryStats, 'highIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 3 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : schemaVersion >= 2 ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '中低意向' : '活跃对话'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'cIntentGroupCount') + readNumber(summaryStats, 'dIntentGroupCount') : reportDetail.activeTopicCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? `C类 ${readNumber(summaryStats, 'cIntentGroupCount')} / D类 ${readNumber(summaryStats, 'dIntentGroupCount')}` : `总消息 ${reportDetail.totalMessageCount}`}</small></article>
-                <article className="stat-card"><span className="stat-label">{schemaVersion >= 2 ? '待补信息' : '客户消息'}</span><strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'missingIntentGroupCount') : reportDetail.userMessageCount}</strong><small className="stat-meta">{schemaVersion >= 2 ? '独立标签，不等于 C/D' : `助手消息 ${reportDetail.assistantMessageCount}`}</small></article>
+                <article className="stat-card">
+                  <span className="stat-label">{schemaVersion >= 2 ? '来访组数' : '来访客户'}</span>
+                  <strong className="stat-value">{schemaVersion >= 2 ? readNumber(summaryStats, 'visitedGroupCount') : reportDetail.visitedCustomerCount}</strong>
+                  <small className="stat-meta">营业日 {reportDetail.businessDate}</small>
+                </article>
+                <article className="stat-card">
+                  <span className="stat-label">{schemaVersion >= 3 ? '首访 / 复访' : schemaVersion >= 2 ? 'A/B 类' : '活跃对话'}</span>
+                  <strong className="stat-value">
+                    {schemaVersion >= 3
+                      ? `${readNumber(summaryStats, 'firstVisitGroupCount')} / ${readNumber(summaryStats, 'revisitGroupCount')}`
+                      : schemaVersion >= 2
+                        ? readNumber(summaryStats, 'highIntentGroupCount')
+                        : reportDetail.activeTopicCount}
+                  </strong>
+                  <small className="stat-meta">
+                    {schemaVersion >= 3
+                      ? `合计来访 ${readNumber(summaryStats, 'visitedGroupCount')}`
+                      : schemaVersion >= 2
+                        ? `A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}`
+                        : `总消息 ${reportDetail.totalMessageCount}`}
+                  </small>
+                </article>
+                {schemaVersion >= 2 ? (
+                  <>
+                    <article className="stat-card">
+                      <span className="stat-label">A/B 类</span>
+                      <strong className="stat-value">{readNumber(summaryStats, 'highIntentGroupCount')}</strong>
+                      <small className="stat-meta">{`A类 ${readNumber(summaryStats, 'aIntentGroupCount')} / B类 ${readNumber(summaryStats, 'bIntentGroupCount')}`}</small>
+                    </article>
+                    <article className="stat-card">
+                      <span className="stat-label">待补信息</span>
+                      <strong className="stat-value">{readNumber(summaryStats, 'missingIntentGroupCount')}</strong>
+                      <small className="stat-meta">独立标签，不等于 CD 类</small>
+                    </article>
+                  </>
+                ) : (
+                  <article className="stat-card">
+                    <span className="stat-label">客户消息</span>
+                    <strong className="stat-value">{reportDetail.userMessageCount}</strong>
+                    <small className="stat-meta">{`助手消息 ${reportDetail.assistantMessageCount}`}</small>
+                  </article>
+                )}
               </div>
 
               <div className="daily-report-summary-card">

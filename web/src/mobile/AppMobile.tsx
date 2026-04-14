@@ -368,7 +368,7 @@ function buildOverviewLead(executiveSummary: string) {
 }
 
 function buildMobileDailyHeadline(normalizedStats: ReturnType<typeof normalizeDailyStats>) {
-  return '今日来访 ' + normalizedStats.visitedCount + ' 组，首访 ' + normalizedStats.firstVisitCount + ' 组，复访 ' + normalizedStats.revisitCount + ' 组，中高意向 ' + normalizedStats.highIntentCount + ' 组，中低意向 ' + normalizedStats.lowMediumIntentCount + ' 组，待补信息 ' + normalizedStats.missingCount + ' 组';
+  return '今日来访 ' + normalizedStats.visitedCount + ' 组，首访 ' + normalizedStats.firstVisitCount + ' 组，复访 ' + normalizedStats.revisitCount + ' 组，A/B 类 ' + normalizedStats.highIntentCount + ' 组，待补信息 ' + normalizedStats.missingCount + ' 组';
 }
 
 function formatPriorityLabel(priority: string) {
@@ -2366,8 +2366,7 @@ function MobileDailyDetailPage({
             <SummaryCard label="今日来访" value={normalizedStats.visitedCount} meta="" stacked />
             <SummaryCard label="首访" value={normalizedStats.firstVisitCount} meta="" stacked />
             <SummaryCard label="复访" value={normalizedStats.revisitCount} meta="" stacked />
-            <SummaryCard label={'中高意向'} value={normalizedStats.highIntentCount} meta={'A类 ' + normalizedStats.aCount + '\n' + 'B类 ' + normalizedStats.bCount} stacked />
-            <SummaryCard label={'中低意向'} value={normalizedStats.lowMediumIntentCount} meta={'C类 ' + normalizedStats.cCount + '\n' + 'D类 ' + normalizedStats.dCount} stacked />
+            <SummaryCard label={'A/B 类'} value={normalizedStats.highIntentCount} meta={'A类 ' + normalizedStats.aCount + '\n' + 'B类 ' + normalizedStats.bCount} stacked />
             <SummaryCard label="待补信息" value={normalizedStats.missingCount} meta={'独立标签'} stacked />
           </div>
 

@@ -13,8 +13,7 @@ This release focuses on simplifying the admin topbar and removing duplicate proj
 
 ## Deployment Status
 
-- `ali-temp` was deployed first and used as the verification environment for this UI adjustment.
-- `ali-2c2g` was synced on 2026-04-03 after the temp verification passed.
+- `ali-2c2g` was synced on 2026-04-03 and remains the active deployment target.
 - Production now serves:
   - `/admin/assets/main-DpRhrgiX.js`
   - `/admin/assets/styles-Cgb2-UmV.css`

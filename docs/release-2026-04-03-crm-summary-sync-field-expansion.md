@@ -34,8 +34,7 @@ This release expands the lightweight CRM summary sync so the assistant can persi
 
 ## Deployment Status
 
-- `ali-temp` was used for verification and hotfix iteration first.
-- `ali-2c2g` was synced after verification passed.
+- `ali-2c2g` was synced after verification passed and remains the active deployment target.
 - The shared global document `customer-discuss-rules` was updated to the new `v2` template.
 
 ## Verification
