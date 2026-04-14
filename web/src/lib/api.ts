@@ -34,6 +34,7 @@
   ProjectOverviewResult,
   ProjectSummary,
   ProjectTemplate,
+  SystemMetricsResult,
   UserOption,
 } from '../types';
 
@@ -239,6 +240,14 @@ export const api = {
 
   getPortfolioProjects: async (actorId: string, businessDate?: string) =>
     request<PortfolioProjectsResult>(`/api/portfolio/projects${buildQueryString({ businessDate })}`, {
+      actorId,
+    }),
+
+  getSystemMetrics: async (
+    actorId: string,
+    filters: { asOfDate?: string; dateFrom?: string; dateTo?: string },
+  ) =>
+    request<SystemMetricsResult>(`/api/system/metrics${buildQueryString(filters)}`, {
       actorId,
     }),
 

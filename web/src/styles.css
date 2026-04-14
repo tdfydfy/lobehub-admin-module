@@ -452,6 +452,97 @@ button.danger { background: #fff1ed; color: var(--danger); border-color: rgba(13
 .portfolio-open-button {
   font-weight: 700;
 }
+.system-metrics-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.system-metrics-head {
+  align-items: flex-start;
+}
+.system-metrics-filter-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+.system-metrics-hero {
+  margin-bottom: 18px;
+}
+.system-metrics-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.system-metric-card {
+  min-height: 124px;
+  padding: 18px;
+}
+.system-metric-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 12px;
+}
+.system-metric-section-title h3 {
+  margin: 2px 0 0;
+}
+.system-trend-section {
+  margin-bottom: 18px;
+}
+.system-trend-head {
+  align-items: flex-start;
+}
+.system-trend-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: min(100%, 840px);
+}
+.system-trend-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+}
+.system-trend-legend-item strong {
+  display: block;
+}
+.system-trend-legend-swatch {
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.48);
+}
+.system-trend-chart-shell {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 247, 239, 0.84)),
+    radial-gradient(circle at top left, rgba(163, 63, 35, 0.08), transparent 36%);
+}
+.system-trend-chart {
+  width: 100%;
+  overflow-x: auto;
+}
+.system-trend-chart svg {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+.system-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.system-metrics-table {
+  min-width: 1480px;
+}
 
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .member-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
@@ -1296,6 +1387,10 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .member-form-grid { grid-template-columns: 1fr; }
   .assistant-detail-grid, .assistant-skill-list { grid-template-columns: 1fr; }
   .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .portfolio-stats-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .system-metrics-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .system-metrics-stats-grid,
+  .system-trend-legend,
+  .system-signal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .customer-analysis-layout { grid-template-columns: 1fr; }
   .customer-analysis-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topic-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1327,6 +1422,12 @@ ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
   .statusbar { font-size: 13px; }
   .data-browser-toolbar, .raw-column-toolbar { flex-direction: column; align-items: stretch; }
   .report-filter-grid, .report-stats-grid, .report-job-grid, .project-grid, .portfolio-stats-grid, .daily-report-settings-grid, .daily-report-filter-grid, .daily-report-card-list { grid-template-columns: 1fr; }
+  .system-metrics-filter-grid { grid-template-columns: 1fr; }
+  .system-metrics-stats-grid,
+  .system-trend-legend,
+  .system-signal-grid { grid-template-columns: 1fr; }
+  .system-trend-chart-shell { padding: 12px; }
+  .system-trend-chart svg { min-width: 640px; }
   .customer-analysis-filter-grid { grid-template-columns: 1fr; }
   .topic-filter-grid { grid-template-columns: 1fr; }
   .daily-report-run-row, .daily-report-customer-head, .customer-analysis-message-head, .customer-analysis-job-card { flex-direction: column; align-items: stretch; }

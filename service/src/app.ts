@@ -15,6 +15,7 @@ import { registerProjectDocumentRoutes } from './routes/project-documents.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { registerSystemMetricsRoutes } from './routes/system-metrics.js';
 
 function normalizeOriginCandidate(value: string) {
   const trimmed = value.trim();
@@ -138,6 +139,7 @@ export async function buildApp() {
 
   await registerHealthRoutes(app);
   await registerSystemRoutes(app);
+  await registerSystemMetricsRoutes(app);
   await registerGlobalDocumentRoutes(app);
   await registerDatabaseRoutes(app);
   await registerPortfolioRoutes(app);

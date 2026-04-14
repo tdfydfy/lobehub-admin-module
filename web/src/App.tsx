@@ -8,6 +8,7 @@ import { ProjectOverviewPanel } from './components/ProjectOverviewPanel';
 import { ProjectPortfolioPanel } from './components/ProjectPortfolioPanel';
 import { formatTimeToShanghai } from './lib/time';
 import { ProjectReportPanel } from './components/ProjectReportPanel';
+import { SystemMetricsPanel } from './components/SystemMetricsPanel';
 import { ProjectTopicStatsPanel } from './components/ProjectTopicStatsPanel';
 import { api } from './lib/api';
 import type {
@@ -26,7 +27,7 @@ import type {
 type TabKey = 'overview' | 'members' | 'assistant' | 'docs' | 'globalDocs' | 'data' | 'daily' | 'analysis' | 'topic' | 'browser';
 type PortalMode = 'system' | 'workspace' | 'member' | 'empty';
 type WorkbenchMode = 'system' | 'workspace' | 'member';
-type SystemPage = 'project-list' | 'project-create' | 'project-detail' | 'global-docs';
+type SystemPage = 'metrics' | 'project-list' | 'project-create' | 'project-detail' | 'global-docs';
 
 function formatTime(value?: string | null) {
   return formatTimeToShanghai(value);
@@ -890,6 +891,7 @@ function AccountContextCard({
 type SystemAdminSidebarCardProps = {
   currentPage: SystemPage;
   projectCount: number;
+  onShowMetrics: () => void;
   onShowGlobalDocs: () => void;
   onShowProjectList: () => void;
   onShowCreatePage: () => void;
@@ -898,6 +900,7 @@ type SystemAdminSidebarCardProps = {
 function SystemAdminSidebarCard({
   currentPage,
   projectCount,
+  onShowMetrics,
   onShowGlobalDocs,
   onShowProjectList,
   onShowCreatePage,
@@ -910,6 +913,9 @@ function SystemAdminSidebarCard({
       </div>
 
       <div className="sidebar-nav">
+        <button className={currentPage === 'metrics' ? 'active' : ''} onClick={onShowMetrics}>
+          平台统计
+        </button>
         <button className={currentPage === 'project-list' ? 'active' : ''} onClick={onShowProjectList}>
           项目列表
         </button>
@@ -1142,7 +1148,7 @@ export default function App() {
   const [actorId, setActorId] = useState('');
   const [actorContext, setActorContext] = useState<ActorContext | null>(null);
   const [projects, setProjects] = useState<NormalizedProject[]>([]);
-  const [systemPage, setSystemPage] = useState<SystemPage>('project-list');
+  const [systemPage, setSystemPage] = useState<SystemPage>('metrics');
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [projectReloadKey, setProjectReloadKey] = useState(0);
   const [selectedTab, setSelectedTab] = useState<TabKey>('overview');
@@ -1722,7 +1728,9 @@ export default function App() {
   const hasStaleProjectDetail = Boolean(projectDetail && projectDetail.id !== selectedProjectId);
   const provisionBusy = provisionSubmitting || (Boolean(latestJobId) && (!job || ['pending', 'running'].includes(job.status)));
   const statusTarget = portalMode === 'system'
-    ? systemPage === 'project-list'
+    ? systemPage === 'metrics'
+      ? 'System metrics'
+      : systemPage === 'project-list'
       ? 'Project list'
       : systemPage === 'project-create'
         ? 'New project'
@@ -1792,6 +1800,7 @@ export default function App() {
                 <SystemAdminSidebarCard
                   currentPage={systemPage}
                   projectCount={projects.length}
+                  onShowMetrics={() => setSystemPage('metrics')}
                   onShowGlobalDocs={() => setSystemPage('global-docs')}
                   onShowProjectList={() => setSystemPage('project-list')}
                   onShowCreatePage={() => setSystemPage('project-create')}
@@ -1835,6 +1844,14 @@ export default function App() {
       ) : portalMode === 'system' ? (
         <main className="workspace workspace-single">
           <section className="panel panel-main">
+            {systemPage === 'metrics' ? (
+              <SystemMetricsPanel
+                actorId={actorId}
+                onOpenProject={openSystemProject}
+                onFeedback={setFeedback}
+              />
+            ) : null}
+
             {systemPage === 'project-list' ? (
               <SystemProjectListPage
                 actorId={actorId}

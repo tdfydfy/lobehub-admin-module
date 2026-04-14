@@ -85,6 +85,105 @@ export type PortfolioSummaryResult = {
   summary: PortfolioSummary;
 };
 
+export type SystemMetricsResult = {
+  filters: {
+    asOfDate: string;
+    dateFrom: string;
+    dateTo: string;
+    timezone: string;
+  };
+  snapshot: {
+    projectCount: number;
+    adminBindingCount: number;
+    memberBindingCount: number;
+    totalMemberBindingCount: number;
+    managedMemberCount: number;
+    managedAssistantCount: number;
+    managedSessionCount: number;
+    cumulativeTopicCount: number;
+    cumulativeVisibleMessageCount: number;
+    cumulativeUserMessageCount: number;
+    cumulativeAssistantMessageCount: number;
+    dailyReportCount: number;
+    dailyReportRevisionCount: number;
+    customerAnalysisSessionCount: number;
+    customerAnalysisJobCount: number;
+    customerAnalysisCompletedJobCount: number;
+    customerAnalysisFailedJobCount: number;
+  };
+  range: {
+    newProjectCount: number;
+    newMemberBindingCount: number;
+    newAdminBindingCount: number;
+    newManagedMemberCount: number;
+    newTopicCount: number;
+    activeTopicCount: number;
+    activeTopicDayCount: number;
+    visitCustomerCount: number;
+    visitCustomerDayCount: number;
+    firstVisitCount: number;
+    revisitCount: number;
+    activeMemberCount: number;
+    visibleMessageCount: number;
+    userMessageCount: number;
+    assistantMessageCount: number;
+    aIntentCount: number;
+    bIntentCount: number;
+    cIntentCount: number;
+    dIntentCount: number;
+    highIntentCount: number;
+    missingIntentCount: number;
+    dailyReportCount: number;
+    dailyReportCompletedJobCount: number;
+    dailyReportFailedJobCount: number;
+    customerAnalysisSessionCount: number;
+    customerAnalysisJobCount: number;
+    customerAnalysisCompletedJobCount: number;
+    customerAnalysisFailedJobCount: number;
+  };
+  trend: Array<{
+    businessDate: string;
+    newProjectCount: number;
+    newMemberBindingCount: number;
+    newTopicCount: number;
+    activeTopicCount: number;
+    visitCustomerCount: number;
+    firstVisitCount: number;
+    revisitCount: number;
+    activeMemberCount: number;
+    visibleMessageCount: number;
+    dailyReportCount: number;
+    customerAnalysisJobCount: number;
+  }>;
+  projects: Array<{
+    projectId: string;
+    projectName: string;
+    description: string | null;
+    createdAt: string;
+    adminCount: number;
+    memberCount: number;
+    managedMemberCount: number;
+    newTopicCount: number;
+    activeTopicCount: number;
+    visitCustomerCount: number;
+    firstVisitCount: number;
+    revisitCount: number;
+    activeMemberCount: number;
+    visibleMessageCount: number;
+    userMessageCount: number;
+    assistantMessageCount: number;
+    dailyReportCount: number;
+    dailyReportCompletedJobCount: number;
+    dailyReportFailedJobCount: number;
+    customerAnalysisSessionCount: number;
+    customerAnalysisJobCount: number;
+    customerAnalysisCompletedJobCount: number;
+    customerAnalysisFailedJobCount: number;
+    runningTaskCount: number;
+    failedTaskCount: number;
+  }>;
+};
+
 export type ProjectOverviewResult = {
   overview: {
     project: {
