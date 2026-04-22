@@ -13,6 +13,25 @@ type PortfolioProjectRow = {
   member_count: number;
 };
 
+type PortfolioOverviewSnapshot = NonNullable<Awaited<ReturnType<typeof getProjectOverview>>>;
+
+function emptyOverviewStats() {
+  return {
+    newTopicCount: 0,
+    activeTopicCount: 0,
+    visitCustomerCount: 0,
+    firstVisitCount: 0,
+    revisitCount: 0,
+    activeMemberCount: 0,
+    aIntentCount: 0,
+    bIntentCount: 0,
+    cIntentCount: 0,
+    dIntentCount: 0,
+    highIntentCount: 0,
+    missingIntentCount: 0,
+  };
+}
+
 async function fetchPortfolioProjects(actorId: string, isSystemAdmin: boolean) {
   if (isSystemAdmin) {
     return query<PortfolioProjectRow>(
@@ -92,6 +111,30 @@ async function fetchProjectJobCounts(projectId: string) {
 }
 
 export async function registerPortfolioRoutes(app: FastifyInstance) {
+  async function loadProjectOverview(projectId: string, businessDate: string | undefined, actorId: string) {
+    try {
+      return await getProjectOverview(projectId, businessDate);
+    } catch (error) {
+      app.log.error(
+        { err: error, actorId, projectId, businessDate },
+        'Failed to load portfolio project overview',
+      );
+      return null;
+    }
+  }
+
+  async function loadProjectJobCounts(projectId: string, businessDate: string | undefined, actorId: string) {
+    try {
+      return await fetchProjectJobCounts(projectId);
+    } catch (error) {
+      app.log.error(
+        { err: error, actorId, projectId, businessDate },
+        'Failed to load portfolio project job counts',
+      );
+      return { running_job_count: 0, failed_job_count: 0 };
+    }
+  }
+
   app.get('/api/portfolio/projects', async (request) => {
     const actor = await requireActor(request);
     const filters = z.object({
@@ -107,9 +150,10 @@ export async function registerPortfolioRoutes(app: FastifyInstance) {
 
     const rows = await Promise.all(projectsResult.rows.map(async (project) => {
       const [overview, jobCounts] = await Promise.all([
-        getProjectOverview(project.id, filters.businessDate),
-        fetchProjectJobCounts(project.id),
+        loadProjectOverview(project.id, filters.businessDate, actor.id),
+        loadProjectJobCounts(project.id, filters.businessDate, actor.id),
       ]);
+      const stats = overview?.stats ?? emptyOverviewStats();
 
       return {
         projectId: project.id,
@@ -120,23 +164,24 @@ export async function registerPortfolioRoutes(app: FastifyInstance) {
         memberCount: project.member_count,
         managedMemberCount: overview?.members.managedMemberCount ?? 0,
         businessDate: overview?.project.businessDate ?? null,
-        newTopicCount: overview?.stats.newTopicCount ?? 0,
-        activeTopicCount: overview?.stats.activeTopicCount ?? 0,
-        visitCustomerCount: overview?.stats.visitCustomerCount ?? 0,
-        firstVisitCount: overview?.stats.firstVisitCount ?? 0,
-        revisitCount: overview?.stats.revisitCount ?? 0,
-        activeMemberCount: overview?.stats.activeMemberCount ?? 0,
-        aIntentCount: overview?.stats.aIntentCount ?? 0,
-        bIntentCount: overview?.stats.bIntentCount ?? 0,
-        cIntentCount: overview?.stats.cIntentCount ?? 0,
-        dIntentCount: overview?.stats.dIntentCount ?? 0,
-        lowMediumIntentCount: (overview?.stats.cIntentCount ?? 0) + (overview?.stats.dIntentCount ?? 0),
-        highIntentCount: overview?.stats.highIntentCount ?? 0,
-        missingIntentCount: overview?.stats.missingIntentCount ?? 0,
+        newTopicCount: stats.newTopicCount,
+        activeTopicCount: stats.activeTopicCount,
+        visitCustomerCount: stats.visitCustomerCount,
+        firstVisitCount: stats.firstVisitCount,
+        revisitCount: stats.revisitCount,
+        activeMemberCount: stats.activeMemberCount,
+        aIntentCount: stats.aIntentCount,
+        bIntentCount: stats.bIntentCount,
+        cIntentCount: stats.cIntentCount,
+        dIntentCount: stats.dIntentCount,
+        lowMediumIntentCount: stats.cIntentCount + stats.dIntentCount,
+        highIntentCount: stats.highIntentCount,
+        missingIntentCount: stats.missingIntentCount,
         latestReportBusinessDate: overview?.latestReport?.businessDate ?? null,
         latestReportGeneratedAt: overview?.latestReport?.generatedAt ?? null,
         runningJobCount: jobCounts.running_job_count,
         failedJobCount: jobCounts.failed_job_count,
+        dataAvailable: Boolean(overview),
       };
     }));
 
@@ -163,8 +208,13 @@ export async function registerPortfolioRoutes(app: FastifyInstance) {
       throw error;
     }
 
-    const overviews = (await Promise.all(projectsResult.rows.map((project) => getProjectOverview(project.id, filters.businessDate))))
-      .filter((overview): overview is NonNullable<Awaited<ReturnType<typeof getProjectOverview>>> => Boolean(overview));
+    const overviewEntries = await Promise.all(projectsResult.rows.map(async (project) => ({
+      projectId: project.id,
+      overview: await loadProjectOverview(project.id, filters.businessDate, actor.id),
+    })));
+    const overviews = overviewEntries
+      .map((entry) => entry.overview)
+      .filter((overview): overview is PortfolioOverviewSnapshot => Boolean(overview));
 
     const summary = overviews.reduce((accumulator, overview) => {
       accumulator.projectCount += 1;
@@ -195,13 +245,16 @@ export async function registerPortfolioRoutes(app: FastifyInstance) {
       missingIntentCount: 0,
     });
 
-    const jobCounts = await Promise.all(projectsResult.rows.map((project) => fetchProjectJobCounts(project.id)));
+    const jobCounts = await Promise.all(projectsResult.rows.map((project) =>
+      loadProjectJobCounts(project.id, filters.businessDate, actor.id)));
 
     return {
       summary: {
         ...summary,
+        projectCount: projectsResult.rows.length,
         runningJobCount: jobCounts.reduce((total, item) => total + item.running_job_count, 0),
         failedJobCount: jobCounts.reduce((total, item) => total + item.failed_job_count, 0),
+        unavailableProjectCount: projectsResult.rows.length - overviews.length,
       },
     };
   });

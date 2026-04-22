@@ -87,4 +87,4 @@
 
 - 首次提交独立外挂管理模块
 - 初步落下项目管理、成员管理、模板助手配置、部署说明与生产环境示例文件
-- 补齐 `daiworld.com / www.daiworld.com` HTTPS 部署与旧 IP 兜底升级文档
+- 补齐 `daiworld.top` HTTPS 部署与旧 IP 兜底升级文档

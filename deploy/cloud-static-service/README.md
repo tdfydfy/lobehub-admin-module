@@ -24,8 +24,8 @@
   - 后端生产环境变量模板
 - `nginx.admin.conf.example`
   - Nginx 路由示例
-- `nginx.admin.https.daiworld.com.conf.example`
-  - `daiworld.com` / `www.daiworld.com` HTTPS + 旧 IP HTTP 兜底示例
+- `nginx.admin.https.daiworld.top.conf.example`
+  - `daiworld.top` HTTPS + 旧 IP HTTP 兜底示例
 - `release-checklist.md`
   - 上线前检查项
 

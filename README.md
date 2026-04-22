@@ -199,3 +199,32 @@ npm run build
 ## 更新日志
 
 历史更新已从 README 拆出，见 [CHANGELOG.md](CHANGELOG.md)。
+
+## Current Infra
+
+- 正式域名仅保留 `https://daiworld.top`
+- 管理端入口：`https://daiworld.top/admin/`
+- 管理端健康检查：`https://daiworld.top/admin-api/health`
+- 当前主部署主机：`ali-2c2g -> root@112.74.94.150`
+- 当前补充服务器：`hk-16 -> root@154.94.233.60`
+- 仓库内旧域名、废弃 IP 与旧主机别名示例均已移除
+
+## SSH Aliases
+
+当前本地 `~/.ssh/config` 推荐保留：
+
+```sshconfig
+Host ali-2c2g
+  HostName 112.74.94.150
+  User root
+  Port 22
+  IdentityFile C:/Users/mydfy/.ssh/id_ed25519
+  IdentitiesOnly yes
+
+Host hk-16
+  HostName 154.94.233.60
+  User root
+  Port 22
+  IdentityFile C:/Users/mydfy/.ssh/id_ed25519
+  IdentitiesOnly yes
+```

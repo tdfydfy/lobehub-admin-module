@@ -3,11 +3,9 @@
 本文按当前目标场景编写：
 
 - 正式域名：
-  - `https://daiworld.com`
-  - `https://www.daiworld.com`
+- `https://daiworld.top`
 - 继续保留旧 IP 兜底入口：
   - `http://112.74.94.150`
-  - `http://39.108.106.95`
 - 管理端前端：
   - `/admin/`
 - 管理端后端：
@@ -15,14 +13,28 @@
 
 当前推荐访问方式：
 - 正式入口：
-  - `https://daiworld.com/admin/`
-  - `https://www.daiworld.com/admin/`
+- `https://daiworld.top/admin/`
 - API 健康检查：
-  - `https://daiworld.com/admin-api/health`
-  - `https://www.daiworld.com/admin-api/health`
+- `https://daiworld.top/admin-api/health`
 - IP 兜底入口：
   - `http://112.74.94.150/admin/`
-  - `http://39.108.106.95/admin/`
+
+## 0. SSH 主机
+
+当前线上相关主机统一使用以下 SSH 别名：
+
+- `ali-2c2g`
+  - `root@112.74.94.150`
+  - 当前管理端主部署主机
+- `hk-16`
+  - `root@154.94.233.60`
+  - 已启用公钥登录，可直接用于补充排障或备用部署
+
+说明：
+
+- 对外正式访问域名只保留 `daiworld.top`
+- 网关入口保持 `/admin/` 和 `/admin-api/`
+- 仓库内旧域名、废弃 IP、旧机器别名示例均已移除
 
 ## 1. 目录结构
 
@@ -128,7 +140,7 @@ npm run build
 
 当前建议使用 HTTPS 双域名 + HTTP IP 兜底的 Nginx 示例文件：
 
-- [deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example)
+- [deploy/cloud-static-service/nginx.admin.https.daiworld.top.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.top.conf.example)
 
 如果你仍沿用 Docker 网关目录部署，则把等价配置同步到：
 
@@ -154,7 +166,7 @@ npm run build
 PORT=3321
 HOST=0.0.0.0
 DATABASE_URL=postgresql://username:password@host/database?sslmode=require&channel_binding=require
-CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95
+CORS_ORIGIN=https://daiworld.top,http://112.74.94.150
 ADMIN_SESSION_COOKIE_NAME=lobehub_admin_session
 ADMIN_SESSION_TTL_HOURS=12
 ADMIN_SESSION_SECURE_COOKIE=false
@@ -179,7 +191,6 @@ VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 如果还要支持：
 
 - `http://112.74.94.150/admin/`
-- `http://39.108.106.95/admin/`
 
 那么登录 cookie 不能强制设成 `Secure=true`，否则通过 HTTP IP 访问时 cookie 不会写入，登录会直接失效。
 
@@ -191,19 +202,18 @@ VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 
 当前建议的网关策略是：
 
-1. `daiworld.com` 与 `www.daiworld.com` 的 HTTP 请求统一 301 到 HTTPS
-2. 两个域名的 HTTPS 请求正常提供 `/`、`/admin/`、`/admin-api/`
+1. `daiworld.top` 的 HTTP 请求统一 301 到 HTTPS
+2. `daiworld.top` 的 HTTPS 请求正常提供 `/`、`/admin/`、`/admin-api/`
 3. 对公网 IP 的 HTTP 请求继续保留原能力，作为兜底入口
 
 证书建议：
-- `daiworld.com`
-- `www.daiworld.com`
+- `daiworld.top`
 
 证书文件路径在示例中使用：
 
 ```text
-/etc/letsencrypt/live/daiworld.com/fullchain.pem
-/etc/letsencrypt/live/daiworld.com/privkey.pem
+/etc/letsencrypt/live/daiworld.top/fullchain.pem
+/etc/letsencrypt/live/daiworld.top/privkey.pem
 ```
 
 如你的证书路径不同，按实际服务器路径替换即可。
@@ -233,17 +243,14 @@ docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehu
 ### HTTPS 域名入口
 
 ```text
-https://daiworld.com/admin/
-https://www.daiworld.com/admin/
-https://daiworld.com/admin-api/health
-https://www.daiworld.com/admin-api/health
+https://daiworld.top/admin/
+https://daiworld.top/admin-api/health
 ```
 
 ### HTTP IP 兜底入口
 
 ```text
 http://112.74.94.150/admin/
-http://39.108.106.95/admin/
 ```
 
 ### 需要重点确认
@@ -268,7 +275,7 @@ ADMIN_SESSION_SECURE_COOKIE=true
 同时把 `CORS_ORIGIN` 收紧为：
 
 ```env
-CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com
+CORS_ORIGIN=https://daiworld.top
 ```
 
 ## 11. 已部署环境升级

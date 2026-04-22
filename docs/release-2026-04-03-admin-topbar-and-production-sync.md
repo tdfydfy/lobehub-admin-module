@@ -22,3 +22,13 @@ This release focuses on simplifying the admin topbar and removing duplicate proj
 
 - A production static backup was created on `ali-2c2g`:
   - `/tmp/admin-web-backup-2026-04-03-005431.tgz`
+
+## 2026-04-22 Follow-up
+
+- The active production domain remains `https://daiworld.top`.
+- `ali-2c2g` remains the primary deployment host for the admin service.
+- `hk-16` was added as a secondary server and now supports SSH key login.
+- The portfolio homepage follow-up fix was deployed on `ali-2c2g`:
+  - `/api/portfolio/projects`
+  - `/api/portfolio/summary`
+- The service now degrades per project instead of failing the whole page after partial data or migration inconsistencies.

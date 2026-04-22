@@ -56,7 +56,7 @@ PROJECT_DOCS_INTERNAL_TOKEN=replace-with-a-long-random-string
 如需启用项目文档共享知识插件，额外配置：
 
 ```bash
-PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL=https://39.108.106.95/admin-api
+PROJECT_DOCS_PLUGIN_PUBLIC_BASE_URL=https://daiworld.top/admin-api
 PROJECT_DOCS_PLUGIN_SECRET=replace-with-a-long-random-string
 ```
 

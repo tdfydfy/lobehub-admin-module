@@ -3,12 +3,10 @@
 本文面向“服务器上已经跑着旧版管理端”的场景。
 
 当前目标是升级到：
-- `https://daiworld.com`
-- `https://www.daiworld.com`
+- `https://daiworld.top`
 
 同时继续保留：
 - `http://112.74.94.150`
-- `http://39.108.106.95`
 
 作为兜底入口。
 
@@ -133,15 +131,14 @@ cd D:\lobe-hub2
 ### 4.3 网关
 
 这次升级如果要同时支持：
-- `https://daiworld.com`
-- `https://www.daiworld.com`
+- `https://daiworld.top`
 - 旧 IP HTTP 兜底
 
 则必须同步新的 Nginx 配置。
 
 建议参考：
 
-- [deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.com.conf.example)
+- [deploy/cloud-static-service/nginx.admin.https.daiworld.top.conf.example](/D:/lobe-hub2/lobehub-admin-module/deploy/cloud-static-service/nginx.admin.https.daiworld.top.conf.example)
 
 把等价配置覆盖到：
 
@@ -161,7 +158,7 @@ cd D:\lobe-hub2
 
 ```env
 HOST=0.0.0.0
-CORS_ORIGIN=https://daiworld.com,https://www.daiworld.com,http://112.74.94.150,http://39.108.106.95
+CORS_ORIGIN=https://daiworld.top,http://112.74.94.150
 ADMIN_SESSION_SECURE_COOKIE=false
 TRUST_PROXY=true
 DAILY_REPORT_DEFAULT_MODEL_PROVIDER=volcengine
@@ -182,7 +179,6 @@ VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 
 只要还保留：
 - `http://112.74.94.150/admin/`
-- `http://39.108.106.95/admin/`
 
 就不能把 cookie 改成 `Secure=true`，否则 IP HTTP 入口登录会失效。
 
@@ -214,16 +210,13 @@ docker compose -f docker-compose.gateway-admin.yml up -d --force-recreate lobehu
 ### HTTPS 域名
 
 检查：
-- `https://daiworld.com/admin/`
-- `https://www.daiworld.com/admin/`
-- `https://daiworld.com/admin-api/health`
-- `https://www.daiworld.com/admin-api/health`
+- `https://daiworld.top/admin/`
+- `https://daiworld.top/admin-api/health`
 
 ### HTTP IP 兜底
 
 检查：
 - `http://112.74.94.150/admin/`
-- `http://39.108.106.95/admin/`
 
 ### 功能项
 
