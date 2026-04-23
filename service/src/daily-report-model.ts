@@ -1,4 +1,5 @@
 ﻿import { env } from './config.js';
+import { getVolcengineRuntimeConfig } from './volcengine-config.js';
 import {
   DAILY_REPORT_PROMPT_VERSION,
   type DailyReportExecutionSnapshot,
@@ -142,12 +143,14 @@ function parseIntentExtractionResult(text: string) {
 }
 
 function resolveModelConfig(snapshot: DailyReportExecutionSnapshot): ResolvedModelConfig {
+  const volcengine = getVolcengineRuntimeConfig();
+
   if (snapshot.modelProvider === 'volcengine') {
     return {
       provider: 'volcengine',
       modelName: snapshot.modelName,
-      endpoint: env.VOLCENGINE_BASE_URL?.trim() || 'https://ark.cn-beijing.volces.com/api/v3',
-      apiKey: env.VOLCENGINE_API_KEY?.trim() || null,
+      endpoint: volcengine.endpoint,
+      apiKey: volcengine.apiKey,
     };
   }
 

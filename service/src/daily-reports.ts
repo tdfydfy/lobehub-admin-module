@@ -3,6 +3,7 @@ import { env } from './config.js';
 import { db, query } from './db.js';
 import { generateDailyReportSummary } from './daily-report-model.js';
 import { resolveBusinessWindow } from './daily-report-time.js';
+import { getVolcengineRuntimeConfig } from './volcengine-config.js';
 import type {
   DailyReportExecutionSnapshot,
   DailyReportGenerationResult,
@@ -196,8 +197,9 @@ function getDailyReportSystemPrompt(customPrompt: string) {
 }
 
 function resolveExecutionSnapshot(setting: DailyReportSettingRecord): DailyReportExecutionSnapshot {
+  const volcengine = getVolcengineRuntimeConfig();
   const modelProvider = env.DAILY_REPORT_DEFAULT_MODEL_PROVIDER
-    ?? (env.VOLCENGINE_API_KEY ? 'volcengine' : 'fallback');
+    ?? (volcengine.hasUsableApiKey ? 'volcengine' : 'fallback');
   const modelName = env.DAILY_REPORT_DEFAULT_MODEL_NAME
     ?? (modelProvider === 'volcengine' ? 'doubao-seed-2-0-lite-260215' : 'built-in-fallback');
 

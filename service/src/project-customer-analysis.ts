@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { env } from './config.js';
 import { db, query } from './db.js';
+import { getVolcengineRuntimeConfig } from './volcengine-config.js';
 
 export type CustomerAnalysisRangePreset = 'today' | 'last7days' | 'last30days' | 'custom';
 
@@ -381,8 +382,9 @@ export function getProjectCustomerAnalysisSystemPrompt() {
 }
 
 function resolveModelConfig(): ModelConfig {
+  const volcengine = getVolcengineRuntimeConfig();
   const provider = env.DAILY_REPORT_DEFAULT_MODEL_PROVIDER
-    ?? (env.VOLCENGINE_API_KEY ? 'volcengine' : 'fallback');
+    ?? (volcengine.hasUsableApiKey ? 'volcengine' : 'fallback');
   const modelName = env.DAILY_REPORT_DEFAULT_MODEL_NAME
     ?? (provider === 'volcengine' ? 'doubao-seed-2-0-lite-260215' : 'built-in-fallback');
 
@@ -390,8 +392,8 @@ function resolveModelConfig(): ModelConfig {
     return {
       provider,
       modelName,
-      endpoint: env.VOLCENGINE_BASE_URL?.trim() || 'https://ark.cn-beijing.volces.com/api/v3',
-      apiKey: env.VOLCENGINE_API_KEY?.trim() || null,
+      endpoint: volcengine.endpoint,
+      apiKey: volcengine.apiKey,
     };
   }
 
